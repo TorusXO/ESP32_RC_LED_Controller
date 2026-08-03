@@ -344,31 +344,19 @@ FocusScope {
                             }
                         }
 
-                        SettingsValuePanel {
+                        SettingsSliderRow {
                             id: triggerThresholdPanel
                             Layout.fillWidth: true
-                            highlighted: thresholdSlider.activeFocus
+                            upControl: accelerometerRow
+                            downControl: testExhaustButton
+                            rightControl: testExhaustButton
                             title: "Trigger threshold"
                             subtitle: "Acceleration delta required to activate the effect"
                             valueText: DeviceController.triggerThresholdG.toFixed(2) + " g"
-                            valueColor: Theme.accent
+                            value: DeviceController.triggerThresholdG
 
-                            ValueSlider {
-                                id: thresholdSlider
-                                anchors.fill: parent
-                                anchors.leftMargin: 10
-                                anchors.rightMargin: 10
-                                from: 0.01
-                                to: 0.50
-                                stepSize: 0.01
-                                value: DeviceController.triggerThresholdG
-                                KeyNavigation.up: accelerometerRow
-                                KeyNavigation.down: testExhaustButton
-                                KeyNavigation.right: testExhaustButton
-
-                                onMoved: {
-                                    DeviceController.SetPendingTriggerThresholdG(value)
-                                }
+                            onValueMoved: function(value) {
+                                DeviceController.SetPendingTriggerThresholdG(value)
                             }
                         }
 
@@ -1414,81 +1402,6 @@ FocusScope {
         }
     }
 
-    component SettingsValuePanel: Rectangle {
-        id: valuePanel
-
-        property string title: ""
-        property string subtitle: ""
-        property string valueText: ""
-        property color valueColor: Theme.accent
-        property bool highlighted: false
-
-        color: Theme.surface
-        radius: 12
-        border.width: valuePanel.highlighted ? 2 : 0
-        border.color: Theme.accent
-        implicitHeight: 110
-
-        ColumnLayout {
-            anchors.fill: parent
-            anchors.leftMargin: 14
-            anchors.rightMargin: 14
-            anchors.topMargin: 13
-            anchors.bottomMargin: 13
-            spacing: 14
-
-            RowLayout {
-                Layout.fillWidth: true
-                Layout.preferredHeight: 40
-
-                Column {
-                    Layout.fillWidth: true
-                    spacing: 4
-
-                    Text {
-                        text: valuePanel.title
-                        color: Theme.textPrimary
-                        font.family: Theme.fontFamily
-                        font.pixelSize: 14
-                        font.weight: Font.Medium
-                    }
-
-                    Text {
-                        text: valuePanel.subtitle
-                        color: Theme.textSecondary
-                        font.family: Theme.fontFamily
-                        font.pixelSize: 10
-                    }
-                }
-
-                Rectangle {
-                    Layout.preferredWidth: valueChip.implicitWidth + 20
-                    Layout.preferredHeight: 27
-                    radius: 10
-                    color: Theme.background
-
-                    Text {
-                        id: valueChip
-                        anchors.centerIn: parent
-                        text: valuePanel.valueText
-                        color: valuePanel.valueColor
-                        font.family: Theme.fontFamily
-                        font.pixelSize: 11
-                        font.weight: Font.DemiBold
-                    }
-                }
-            }
-
-            default property alias content: valueContent.data
-
-            Item {
-                id: valueContent
-                Layout.fillWidth: true
-                Layout.preferredHeight: 24
-            }
-        }
-    }
-
     component SettingsSliderRow: Rectangle {
         id: settingsRow
 
@@ -1499,6 +1412,7 @@ FocusScope {
         property color fillColor: Theme.accent
         property Item upControl: null
         property Item downControl: null
+        property Item rightControl: null
         property alias slider: settingsSlider
 
         signal valueMoved(real value)
@@ -1569,6 +1483,7 @@ FocusScope {
                 fillColor: settingsRow.fillColor
                 KeyNavigation.up: settingsRow.upControl
                 KeyNavigation.down: settingsRow.downControl
+                KeyNavigation.right: settingsRow.rightControl
 
                 onMoved: settingsRow.valueMoved(value)
             }
