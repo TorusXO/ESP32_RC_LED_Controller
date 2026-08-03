@@ -1,0 +1,35 @@
+# Qt Creator and local IDE metadata
+.qtcreator/
+*.user
+*.user.*
+
+# Qt/CMake build output
+build/
+**/build/
+cmake-build-*/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+
+# Android/Gradle generated output
+.gradle/
+**/android-build/
+**/android-build-*/
+*.apk
+*.aab
+
+# Qt generated metadata and caches
+.qmlls.ini
+qmlls.ini
+*.qmltypes
+
+# Local logs and temporary files
+*.log
+*.tmp
+*.bak
+
+# Duplicate working backups
+**/* (2).cpp
+**/* (2).h
+**/* (2).qml
