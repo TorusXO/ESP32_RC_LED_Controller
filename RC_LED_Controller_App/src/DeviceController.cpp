@@ -12,6 +12,7 @@
 #include <QPermission>
 #include <QList>
 #include <QPair>
+#include <QSettings>
 #include <QTimer>
 
 namespace
@@ -125,6 +126,8 @@ FDeviceController::FDeviceController(
             HandleSocketError();
         }
     );
+
+    LoadLocalSettings();
 }
 
 FDeviceController::~FDeviceController() = default;
@@ -243,6 +246,11 @@ int FDeviceController::GetChannelRole(int aChannel) const
 bool FDeviceController::AreSettingsDirty() const
 {
     return bSettingsDirty;
+}
+
+bool FDeviceController::IsSettingsUploadPending() const
+{
+    return bSettingsUploadPending;
 }
 
 int FDeviceController::GetSteeringPulseUs() const
@@ -790,16 +798,247 @@ void FDeviceController::SetChannelRole(int aChannel, int aRole)
     }
 }
 
-void FDeviceController::SaveSettings()
+void FDeviceController::LoadLocalSettings()
 {
-    if (
-        !bConnected ||
-        BluetoothSocketPtr->state() !=
-        QBluetoothSocket::SocketState::ConnectedState
-    )
+    QSettings LocalSettings;
+    if (!LocalSettings.contains(QStringLiteral("settings/version")))
     {
         return;
     }
+
+    bPassiveLightsEnabled = LocalSettings.value(
+        QStringLiteral("settings/passiveLights"),
+        bPassiveLightsEnabled
+    ).toBool();
+    bActiveLightsEnabled = LocalSettings.value(
+        QStringLiteral("settings/activeLights"),
+        bActiveLightsEnabled
+    ).toBool();
+    bExhaustEnabled = LocalSettings.value(
+        QStringLiteral("settings/exhaustEnabled"),
+        bExhaustEnabled
+    ).toBool();
+    bHeadlightsOpen = LocalSettings.value(
+        QStringLiteral("settings/headlightsOpen"),
+        bHeadlightsOpen
+    ).toBool();
+    bFansEnabled = LocalSettings.value(
+        QStringLiteral("settings/fansEnabled"),
+        bFansEnabled
+    ).toBool();
+    bAccelerometerEnabled = LocalSettings.value(
+        QStringLiteral("settings/accelerometerEnabled"),
+        bAccelerometerEnabled
+    ).toBool();
+    TriggerThresholdG = LocalSettings.value(
+        QStringLiteral("settings/triggerThresholdG"),
+        TriggerThresholdG
+    ).toDouble();
+    AccelerometerForwardAxis = LocalSettings.value(
+        QStringLiteral("settings/accelerometerForwardAxis"),
+        AccelerometerForwardAxis
+    ).toInt();
+    bAccelerometerForwardInverted = LocalSettings.value(
+        QStringLiteral("settings/accelerometerForwardInverted"),
+        bAccelerometerForwardInverted
+    ).toBool();
+    AccelerometerToleranceG = LocalSettings.value(
+        QStringLiteral("settings/accelerometerToleranceG"),
+        AccelerometerToleranceG
+    ).toDouble();
+    ActiveBrightnessPercent = LocalSettings.value(
+        QStringLiteral("settings/activeBrightnessPercent"),
+        ActiveBrightnessPercent
+    ).toInt();
+    DimBrightnessPercent = LocalSettings.value(
+        QStringLiteral("settings/dimBrightnessPercent"),
+        DimBrightnessPercent
+    ).toInt();
+    FanSpeedPercent = LocalSettings.value(
+        QStringLiteral("settings/fanSpeedPercent"),
+        FanSpeedPercent
+    ).toInt();
+    ServoClosedPulseUs = LocalSettings.value(
+        QStringLiteral("settings/servoClosedPulseUs"),
+        ServoClosedPulseUs
+    ).toInt();
+    ServoOpenPulseUs = LocalSettings.value(
+        QStringLiteral("settings/servoOpenPulseUs"),
+        ServoOpenPulseUs
+    ).toInt();
+
+    ExhaustLight1Channel = LocalSettings.value(
+        QStringLiteral("settings/exhaustLight1Channel"),
+        ExhaustLight1Channel
+    ).toInt();
+    ExhaustLight2Channel = LocalSettings.value(
+        QStringLiteral("settings/exhaustLight2Channel"),
+        ExhaustLight2Channel
+    ).toInt();
+    PassiveLightsChannel = LocalSettings.value(
+        QStringLiteral("settings/passiveLightsChannel"),
+        PassiveLightsChannel
+    ).toInt();
+    TailLightsChannel = LocalSettings.value(
+        QStringLiteral("settings/tailLightsChannel"),
+        TailLightsChannel
+    ).toInt();
+    LeftTurnLightsChannel = LocalSettings.value(
+        QStringLiteral("settings/leftTurnLightsChannel"),
+        LeftTurnLightsChannel
+    ).toInt();
+    RightTurnLightsChannel = LocalSettings.value(
+        QStringLiteral("settings/rightTurnLightsChannel"),
+        RightTurnLightsChannel
+    ).toInt();
+    HeadlightServoChannel = LocalSettings.value(
+        QStringLiteral("settings/headlightServoChannel"),
+        HeadlightServoChannel
+    ).toInt();
+
+    for (int Channel = 0; Channel < ChannelRoles.size(); ++Channel)
+    {
+        ChannelRoles[Channel] = LocalSettings.value(
+            QStringLiteral("settings/channelRole%1").arg(Channel),
+            ChannelRoles[Channel]
+        ).toInt();
+    }
+
+    bLocalSettingsAvailable = true;
+    bSettingsUploadPending = true;
+}
+
+bool FDeviceController::StoreLocalSettings() const
+{
+    QSettings LocalSettings;
+    LocalSettings.setValue(QStringLiteral("settings/version"), 1);
+    LocalSettings.setValue(
+        QStringLiteral("settings/passiveLights"),
+        bPassiveLightsEnabled
+    );
+    LocalSettings.setValue(
+        QStringLiteral("settings/activeLights"),
+        bActiveLightsEnabled
+    );
+    LocalSettings.setValue(
+        QStringLiteral("settings/exhaustEnabled"),
+        bExhaustEnabled
+    );
+    LocalSettings.setValue(
+        QStringLiteral("settings/headlightsOpen"),
+        bHeadlightsOpen
+    );
+    LocalSettings.setValue(
+        QStringLiteral("settings/fansEnabled"),
+        bFansEnabled
+    );
+    LocalSettings.setValue(
+        QStringLiteral("settings/accelerometerEnabled"),
+        bAccelerometerEnabled
+    );
+    LocalSettings.setValue(
+        QStringLiteral("settings/triggerThresholdG"),
+        TriggerThresholdG
+    );
+    LocalSettings.setValue(
+        QStringLiteral("settings/accelerometerForwardAxis"),
+        AccelerometerForwardAxis
+    );
+    LocalSettings.setValue(
+        QStringLiteral("settings/accelerometerForwardInverted"),
+        bAccelerometerForwardInverted
+    );
+    LocalSettings.setValue(
+        QStringLiteral("settings/accelerometerToleranceG"),
+        AccelerometerToleranceG
+    );
+    LocalSettings.setValue(
+        QStringLiteral("settings/activeBrightnessPercent"),
+        ActiveBrightnessPercent
+    );
+    LocalSettings.setValue(
+        QStringLiteral("settings/dimBrightnessPercent"),
+        DimBrightnessPercent
+    );
+    LocalSettings.setValue(
+        QStringLiteral("settings/fanSpeedPercent"),
+        FanSpeedPercent
+    );
+    LocalSettings.setValue(
+        QStringLiteral("settings/servoClosedPulseUs"),
+        ServoClosedPulseUs
+    );
+    LocalSettings.setValue(
+        QStringLiteral("settings/servoOpenPulseUs"),
+        ServoOpenPulseUs
+    );
+    LocalSettings.setValue(
+        QStringLiteral("settings/exhaustLight1Channel"),
+        ExhaustLight1Channel
+    );
+    LocalSettings.setValue(
+        QStringLiteral("settings/exhaustLight2Channel"),
+        ExhaustLight2Channel
+    );
+    LocalSettings.setValue(
+        QStringLiteral("settings/passiveLightsChannel"),
+        PassiveLightsChannel
+    );
+    LocalSettings.setValue(
+        QStringLiteral("settings/tailLightsChannel"),
+        TailLightsChannel
+    );
+    LocalSettings.setValue(
+        QStringLiteral("settings/leftTurnLightsChannel"),
+        LeftTurnLightsChannel
+    );
+    LocalSettings.setValue(
+        QStringLiteral("settings/rightTurnLightsChannel"),
+        RightTurnLightsChannel
+    );
+    LocalSettings.setValue(
+        QStringLiteral("settings/headlightServoChannel"),
+        HeadlightServoChannel
+    );
+
+    for (int Channel = 0; Channel < ChannelRoles.size(); ++Channel)
+    {
+        LocalSettings.setValue(
+            QStringLiteral("settings/channelRole%1").arg(Channel),
+            ChannelRoles[Channel]
+        );
+    }
+
+    LocalSettings.sync();
+    return LocalSettings.status() == QSettings::NoError;
+}
+
+void FDeviceController::SendSettingsToController()
+{
+    SendCommand(
+        QByteArray("SET,PASSIVE_LIGHTS,") +
+        (bPassiveLightsEnabled ? "1" : "0")
+    );
+
+    SendCommand(
+        QByteArray("SET,ACTIVE_LIGHTS,") +
+        (bActiveLightsEnabled ? "1" : "0")
+    );
+
+    SendCommand(
+        QByteArray("SET,EXHAUST_ENABLED,") +
+        (bExhaustEnabled ? "1" : "0")
+    );
+
+    SendCommand(
+        QByteArray("SET,HEADLIGHT_OPEN,") +
+        (bHeadlightsOpen ? "1" : "0")
+    );
+
+    SendCommand(
+        QByteArray("SET,FANS_ENABLED,") +
+        (bFansEnabled ? "1" : "0")
+    );
 
     SendCommand(
         QByteArray("SET,ACCELEROMETER_ENABLED,") +
@@ -883,9 +1122,36 @@ void FDeviceController::SaveSettings()
     SendCommand(
         QByteArrayLiteral("SAVE")
     );
+}
 
+void FDeviceController::SaveSettings()
+{
+    const bool bStoredLocally = StoreLocalSettings();
+    if (!bStoredLocally)
+    {
+        emit SettingsSaveCompleted(false, false);
+        return;
+    }
+
+    bLocalSettingsAvailable = true;
     bSettingsDirty = false;
+
+    if (
+        !bConnected ||
+        BluetoothSocketPtr->state() !=
+        QBluetoothSocket::SocketState::ConnectedState
+    )
+    {
+        bSettingsUploadPending = true;
+        emit ConfigurationChanged();
+        emit SettingsSaveCompleted(false, true);
+        return;
+    }
+
+    SendSettingsToController();
+    bSettingsUploadPending = false;
     emit ConfigurationChanged();
+    emit SettingsSaveCompleted(true, true);
 }
 
 void FDeviceController::ResetDefaults()
@@ -994,9 +1260,19 @@ void FDeviceController::HandleSocketConnected()
         QByteArrayLiteral("HELLO,1")
     );
 
-    SendCommand(
-        QByteArrayLiteral("GET,CONFIG")
-    );
+    if (bSettingsUploadPending && !bSettingsDirty)
+    {
+        SendSettingsToController();
+        bSettingsUploadPending = false;
+        emit ConfigurationChanged();
+        emit SettingsSaveCompleted(true, true);
+    }
+    else if (!bLocalSettingsAvailable && !bSettingsDirty)
+    {
+        SendCommand(
+            QByteArrayLiteral("GET,CONFIG")
+        );
+    }
 
     RunDiagnostics();
 }

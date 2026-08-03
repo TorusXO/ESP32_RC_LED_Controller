@@ -13,6 +13,8 @@ FocusScope {
 
     signal goBack()
 
+    property string saveFeedback: ""
+
     readonly property var roles: [
         "Unused",
         "Exhaust light 1",
@@ -25,6 +27,26 @@ FocusScope {
         "Cooling fans"
     ]
 
+    Timer {
+        id: saveFeedbackTimer
+        interval: 3500
+        repeat: false
+        onTriggered: root.saveFeedback = ""
+    }
+
+    Connections {
+        target: DeviceController
+
+        function onSettingsSaveCompleted(uploaded, storedLocally) {
+            root.saveFeedback = !storedLocally
+                ? "Unable to store settings locally"
+                : uploaded
+                    ? "Settings saved locally and uploaded to ESP32"
+                    : "Saved locally; connect controller to upload"
+            saveFeedbackTimer.restart()
+        }
+    }
+
     function focusFirstControl() {
         var firstRow = channelList.itemAtIndex(0)
         if (firstRow) {
@@ -33,7 +55,13 @@ FocusScope {
     }
 
     Keys.onPressed: function(event) {
-        if (event.key === Qt.Key_A ||
+        if (event.key === Qt.Key_X) {
+            DeviceController.ResetDefaults()
+            event.accepted = true
+        } else if (event.key === Qt.Key_Y) {
+            DeviceController.SaveSettings()
+            event.accepted = true
+        } else if (event.key === Qt.Key_A ||
             event.key === Qt.Key_Back ||
             event.key === Qt.Key_Escape ||
             event.key === Qt.Key_Backspace) {
@@ -496,12 +524,20 @@ FocusScope {
             Layout.preferredHeight: 28
 
             Text {
-                text: DeviceController.settingsDirty
-                    ? "Unsaved changes"
-                    : "Assignments are stored on the ESP32"
-                color: DeviceController.settingsDirty
-                    ? Theme.warning
-                    : Theme.textSecondary
+                text: root.saveFeedback !== ""
+                    ? root.saveFeedback
+                    : DeviceController.settingsDirty
+                        ? "Unsaved changes — press Y to save"
+                        : DeviceController.settingsUploadPending
+                            ? "Saved locally; waiting to upload"
+                            : "Assignments are stored on the ESP32"
+                color: root.saveFeedback !== ""
+                    ? (root.saveFeedback === "Settings saved locally and uploaded to ESP32"
+                        ? Theme.green
+                        : Theme.warning)
+                    : DeviceController.settingsDirty
+                        ? Theme.warning
+                        : Theme.textSecondary
                 font.family: Theme.fontFamily
                 font.pixelSize: 10
             }

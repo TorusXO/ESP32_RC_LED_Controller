@@ -139,6 +139,12 @@ class FDeviceController final : public QObject
         NOTIFY ConfigurationChanged
     )
 
+    Q_PROPERTY(
+        bool settingsUploadPending
+        READ IsSettingsUploadPending
+        NOTIFY ConfigurationChanged
+    )
+
 
     Q_PROPERTY(
         int steeringPulseUs
@@ -279,6 +285,7 @@ public:
     int GetServoOpenPulseUs() const;
     bool IsServoZeroed() const;
     bool AreSettingsDirty() const;
+    bool IsSettingsUploadPending() const;
 
     Q_INVOKABLE int GetChannelRole(int aChannel) const;
     Q_INVOKABLE void SetChannelRole(int aChannel, int aRole);
@@ -353,6 +360,7 @@ signals:
     void ConnectionChanged();
     void DeviceInformationChanged();
     void ConfigurationChanged();
+    void SettingsSaveCompleted(bool aUploaded, bool aStoredLocally);
     void TelemetryChanged();
     void DiagnosticsChanged();
 
@@ -397,6 +405,10 @@ private:
     void ParseDiagnostics(
         const QList<QByteArray>& aFieldsRef
     );
+
+    void LoadLocalSettings();
+    bool StoreLocalSettings() const;
+    void SendSettingsToController();
 
 
     void SetConnectionState(
@@ -458,6 +470,8 @@ private:
         0, 0, 0, 0, 7, 4, 5, 6
     };
     bool bSettingsDirty = false;
+    bool bLocalSettingsAvailable = false;
+    bool bSettingsUploadPending = false;
 
 
     int SteeringPulseUs = 0;

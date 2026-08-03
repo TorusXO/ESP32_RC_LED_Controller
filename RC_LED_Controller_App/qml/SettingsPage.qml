@@ -12,6 +12,7 @@ FocusScope {
     activeFocusOnTab: true
 
     property int activeCategory: 0
+    property string saveFeedback: ""
     readonly property var settingsRoles: [
         "Unused",
         "Exhaust light 1",
@@ -28,6 +29,26 @@ FocusScope {
     signal openTelemetry()
     signal openAssignments()
     signal openServoCalibration()
+
+    Timer {
+        id: saveFeedbackTimer
+        interval: 3500
+        repeat: false
+        onTriggered: root.saveFeedback = ""
+    }
+
+    Connections {
+        target: DeviceController
+
+        function onSettingsSaveCompleted(uploaded, storedLocally) {
+            root.saveFeedback = !storedLocally
+                ? "Unable to store settings locally"
+                : uploaded
+                    ? "Settings saved locally and uploaded to ESP32"
+                    : "Saved locally; connect controller to upload"
+            saveFeedbackTimer.restart()
+        }
+    }
 
     function focusFirstControl() {
         focusActiveCategory()
@@ -82,7 +103,7 @@ FocusScope {
                 firstChannel.forceActiveFocus()
             }
         } else if (root.activeCategory === 3) {
-            servoClosedSlider.forceActiveFocus()
+            servoClosedSlider.slider.forceActiveFocus()
         } else if (root.activeCategory === 4) {
             gyroForwardAxisSelector.forceActiveFocus()
         } else if (root.activeCategory === 5) {
@@ -198,6 +219,12 @@ FocusScope {
             event.accepted = true
         } else if (event.key === Qt.Key_PageDown) {
             root.scrollActiveContent(1)
+            event.accepted = true
+        } else if (event.key === Qt.Key_X) {
+            DeviceController.ResetDefaults()
+            event.accepted = true
+        } else if (event.key === Qt.Key_Y) {
+            DeviceController.SaveSettings()
             event.accepted = true
         } else if (event.key === Qt.Key_A ||
                    event.key === Qt.Key_Back ||
@@ -322,7 +349,7 @@ FocusScope {
                             label: "Servo calibration"
                             KeyNavigation.left: channelTab
                             KeyNavigation.right: gyroTab
-                            KeyNavigation.down: servoClosedSlider
+                            KeyNavigation.down: servoClosedSlider.slider
                             onActivated: root.activateCategory(category)
                         }
 
@@ -1099,7 +1126,7 @@ FocusScope {
                             subtitle: "Position used when headlights are closed"
                             value: DeviceController.servoClosedPulseUs
                             upControl: null
-                            downControl: servoOpenSlider
+                            downControl: servoOpenSlider.slider
                             onValueMoved: DeviceController.SetPendingServoClosedPulseUs(value)
                         }
 
@@ -1109,7 +1136,7 @@ FocusScope {
                             title: "Open position"
                             subtitle: "Position used when headlights are open"
                             value: DeviceController.servoOpenPulseUs
-                            upControl: servoClosedSlider
+                            upControl: servoClosedSlider.slider
                             downControl: zeroServoButton
                             onValueMoved: DeviceController.SetPendingServoOpenPulseUs(value)
                         }
@@ -1135,7 +1162,7 @@ FocusScope {
                                 id: zeroServoButton
                                 text: "Zero-out servo"
                                 controllerKey: Qt.Key_X
-                                KeyNavigation.up: servoOpenSlider
+                                KeyNavigation.up: servoOpenSlider.slider
                                 onClicked: DeviceController.ZeroServo()
                             }
                         }
@@ -1540,12 +1567,22 @@ FocusScope {
 
                         Text {
                             Layout.fillWidth: true
-                            text: DeviceController.connected
-                                ? DeviceController.deviceStatusSummary
-                                : DeviceController.connectionStatus
-                            color: DeviceController.settingsDirty
-                                ? Theme.warning
-                                : Theme.textSecondary
+                            text: root.saveFeedback !== ""
+                                ? root.saveFeedback
+                                : DeviceController.settingsDirty
+                                    ? "Unsaved changes — press Y to save"
+                                    : DeviceController.settingsUploadPending
+                                        ? "Saved locally; waiting to upload"
+                                        : DeviceController.connected
+                                            ? DeviceController.deviceStatusSummary
+                                            : DeviceController.connectionStatus
+                            color: root.saveFeedback !== ""
+                                ? (root.saveFeedback === "Settings saved locally and uploaded to ESP32"
+                                    ? Theme.green
+                                    : Theme.warning)
+                                : DeviceController.settingsDirty
+                                    ? Theme.warning
+                                    : Theme.textSecondary
                 font.family: Theme.fontFamily
                 font.pixelSize: 10
                 elide: Text.ElideRight
