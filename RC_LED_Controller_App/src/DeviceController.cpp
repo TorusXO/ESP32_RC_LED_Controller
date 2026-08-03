@@ -1,0 +1,1146 @@
+#include "DeviceController.h"
+
+#include <QBluetoothAddress>
+#include <QBluetoothDeviceDiscoveryAgent>
+#include <QBluetoothDeviceInfo>
+#include <QBluetoothPermission>
+#include <QBluetoothServiceInfo>
+#include <QBluetoothSocket>
+#include <QBluetoothUuid>
+#include <QCoreApplication>
+#include <QMetaEnum>
+#include <QPermission>
+#include <QList>
+#include <QPair>
+#include <QTimer>
+
+namespace
+{
+    const QString TargetDeviceName =
+        QStringLiteral("RC-Light-Controller");
+
+    const QBluetoothUuid SerialPortServiceUuid(
+        QBluetoothUuid::ServiceClassUuid::SerialPort
+    );
+
+    static constexpr qsizetype MaximumReceiveBufferSize =
+        4096;
+}
+
+FDeviceController::FDeviceController(
+    QObject* aParentPtr
+)
+    : QObject(aParentPtr)
+    , DiscoveryAgentPtr(
+        new QBluetoothDeviceDiscoveryAgent(this)
+    )
+    , BluetoothSocketPtr(
+        new QBluetoothSocket(
+            QBluetoothServiceInfo::RfcommProtocol,
+            this
+        )
+    )
+    , ReconnectTimerPtr(
+        new QTimer(this)
+    )
+{
+    ReconnectTimerPtr->setSingleShot(true);
+    ReconnectTimerPtr->setInterval(2000);
+
+    connect(
+        ReconnectTimerPtr,
+        &QTimer::timeout,
+        this,
+        &FDeviceController::StartScan
+    );
+
+    connect(
+        DiscoveryAgentPtr,
+        &QBluetoothDeviceDiscoveryAgent::deviceDiscovered,
+        this,
+        &FDeviceController::HandleDeviceDiscovered
+    );
+
+    connect(
+        DiscoveryAgentPtr,
+        &QBluetoothDeviceDiscoveryAgent::finished,
+        this,
+        &FDeviceController::HandleDiscoveryFinished
+    );
+
+    connect(
+        DiscoveryAgentPtr,
+        &QBluetoothDeviceDiscoveryAgent::canceled,
+        this,
+        &FDeviceController::HandleDiscoveryFinished
+    );
+
+    connect(
+        DiscoveryAgentPtr,
+        &QBluetoothDeviceDiscoveryAgent::errorOccurred,
+        this,
+        [this](
+            QBluetoothDeviceDiscoveryAgent::Error aError
+        )
+        {
+            Q_UNUSED(aError);
+
+            SetConnectionState(
+                false,
+                false,
+                DiscoveryAgentPtr->errorString().isEmpty()
+                    ? QStringLiteral("Bluetooth scan failed")
+                    : DiscoveryAgentPtr->errorString()
+            );
+        }
+    );
+
+    connect(
+        BluetoothSocketPtr,
+        &QBluetoothSocket::connected,
+        this,
+        &FDeviceController::HandleSocketConnected
+    );
+
+    connect(
+        BluetoothSocketPtr,
+        &QBluetoothSocket::disconnected,
+        this,
+        &FDeviceController::HandleSocketDisconnected
+    );
+
+    connect(
+        BluetoothSocketPtr,
+        &QBluetoothSocket::readyRead,
+        this,
+        &FDeviceController::HandleSocketReadyRead
+    );
+
+    connect(
+        BluetoothSocketPtr,
+        &QBluetoothSocket::errorOccurred,
+        this,
+        [this](QBluetoothSocket::SocketError)
+        {
+            HandleSocketError();
+        }
+    );
+}
+
+FDeviceController::~FDeviceController() = default;
+
+bool FDeviceController::IsConnected() const
+{
+    return bConnected;
+}
+
+bool FDeviceController::IsScanning() const
+{
+    return bScanning;
+}
+
+const QString& FDeviceController::GetConnectionStatus() const
+{
+    return ConnectionStatus;
+}
+
+const QString& FDeviceController::GetDeviceName() const
+{
+    return DeviceName;
+}
+
+const QString& FDeviceController::GetFirmwareVersion() const
+{
+    return FirmwareVersion;
+}
+
+bool FDeviceController::ArePassiveLightsEnabled() const
+{
+    return bPassiveLightsEnabled;
+}
+
+bool FDeviceController::AreActiveLightsEnabled() const
+{
+    return bActiveLightsEnabled;
+}
+
+bool FDeviceController::IsExhaustEnabled() const
+{
+    return bExhaustEnabled;
+}
+
+bool FDeviceController::AreHeadlightsOpen() const
+{
+    return bHeadlightsOpen;
+}
+
+bool FDeviceController::AreFansEnabled() const
+{
+    return bFansEnabled;
+}
+
+bool FDeviceController::IsAccelerometerEnabled() const
+{
+    return bAccelerometerEnabled;
+}
+
+double FDeviceController::GetTriggerThresholdG() const
+{
+    return TriggerThresholdG;
+}
+
+int FDeviceController::GetActiveBrightnessPercent() const
+{
+    return ActiveBrightnessPercent;
+}
+
+int FDeviceController::GetDimBrightnessPercent() const
+{
+    return DimBrightnessPercent;
+}
+
+int FDeviceController::GetFanSpeedPercent() const
+{
+    return FanSpeedPercent;
+}
+
+int FDeviceController::GetExhaustLight1Channel() const { return ExhaustLight1Channel; }
+int FDeviceController::GetExhaustLight2Channel() const { return ExhaustLight2Channel; }
+int FDeviceController::GetPassiveLightsChannel() const { return PassiveLightsChannel; }
+int FDeviceController::GetTailLightsChannel() const { return TailLightsChannel; }
+int FDeviceController::GetLeftTurnLightsChannel() const { return LeftTurnLightsChannel; }
+int FDeviceController::GetRightTurnLightsChannel() const { return RightTurnLightsChannel; }
+int FDeviceController::GetHeadlightServoChannel() const { return HeadlightServoChannel; }
+int FDeviceController::GetServoClosedPulseUs() const { return ServoClosedPulseUs; }
+int FDeviceController::GetServoOpenPulseUs() const { return ServoOpenPulseUs; }
+bool FDeviceController::IsServoZeroed() const { return bServoZeroed; }
+
+int FDeviceController::GetChannelRole(int aChannel) const
+{
+    if (aChannel < 0 || aChannel > 15)
+    {
+        return 0;
+    }
+
+    return ChannelRoles.value(aChannel, 0);
+}
+
+bool FDeviceController::AreSettingsDirty() const
+{
+    return bSettingsDirty;
+}
+
+int FDeviceController::GetSteeringPulseUs() const
+{
+    return SteeringPulseUs;
+}
+
+int FDeviceController::GetSteeringPercent() const
+{
+    return SteeringPercent;
+}
+
+int FDeviceController::GetThrottlePulseUs() const
+{
+    return ThrottlePulseUs;
+}
+
+int FDeviceController::GetThrottlePercent() const
+{
+    return ThrottlePercent;
+}
+
+double FDeviceController::GetForwardAccelerationG() const
+{
+    return ForwardAccelerationG;
+}
+
+double FDeviceController::GetFilteredForwardAccelerationG() const
+{
+    return FilteredForwardAccelerationG;
+}
+
+double FDeviceController::GetSideAccelerationG() const
+{
+    return SideAccelerationG;
+}
+
+double FDeviceController::GetVerticalAccelerationG() const
+{
+    return VerticalAccelerationG;
+}
+
+double FDeviceController::GetGyroscopeXDps() const
+{
+    return GyroscopeXDps;
+}
+
+double FDeviceController::GetGyroscopeYDps() const
+{
+    return GyroscopeYDps;
+}
+
+double FDeviceController::GetGyroscopeZDps() const
+{
+    return GyroscopeZDps;
+}
+
+const QString& FDeviceController::GetTurnDirection() const
+{
+    return TurnDirection;
+}
+
+bool FDeviceController::IsBrakeActive() const
+{
+    return bBrakeActive;
+}
+
+bool FDeviceController::IsExhaustPulseActive() const
+{
+    return bExhaustPulseActive;
+}
+
+void FDeviceController::StartScan()
+{
+    if (
+        bConnected ||
+        bScanning
+    )
+    {
+        return;
+    }
+
+    bManualDisconnectRequested = false;
+
+    QBluetoothPermission Permission;
+    Permission.setCommunicationModes(
+        QBluetoothPermission::Access
+    );
+
+    switch (
+        QCoreApplication::instance()->checkPermission(Permission)
+    )
+    {
+    case Qt::PermissionStatus::Granted:
+    {
+        BeginBluetoothScan();
+        break;
+    }
+
+    case Qt::PermissionStatus::Denied:
+    {
+        SetConnectionState(
+            false,
+            false,
+            QStringLiteral("Bluetooth permission denied")
+        );
+
+        break;
+    }
+
+    case Qt::PermissionStatus::Undetermined:
+    {
+        QCoreApplication::instance()->requestPermission(
+            Permission,
+            this,
+            [this](
+                const QPermission& aPermissionRef
+            )
+            {
+                if (
+                    aPermissionRef.status() ==
+                    Qt::PermissionStatus::Granted
+                )
+                {
+                    BeginBluetoothScan();
+                    return;
+                }
+
+                SetConnectionState(
+                    false,
+                    false,
+                    QStringLiteral(
+                        "Bluetooth permission denied"
+                    )
+                );
+            }
+        );
+
+        break;
+    }
+    }
+}
+
+void FDeviceController::DisconnectFromDevice()
+{
+    bManualDisconnectRequested = true;
+    ReconnectTimerPtr->stop();
+
+    if (DiscoveryAgentPtr->isActive())
+    {
+        DiscoveryAgentPtr->stop();
+    }
+
+    BluetoothSocketPtr->disconnectFromService();
+}
+
+void FDeviceController::SetPassiveLightsEnabled(
+    bool aEnabled
+)
+{
+    bPassiveLightsEnabled = aEnabled;
+    emit ConfigurationChanged();
+
+    SendCommand(
+        QByteArray("SET,PASSIVE_LIGHTS,") +
+        (aEnabled ? "1" : "0")
+    );
+}
+
+void FDeviceController::SetActiveLightsEnabled(
+    bool aEnabled
+)
+{
+    bActiveLightsEnabled = aEnabled;
+    emit ConfigurationChanged();
+
+    SendCommand(
+        QByteArray("SET,ACTIVE_LIGHTS,") +
+        (aEnabled ? "1" : "0")
+    );
+}
+
+void FDeviceController::SetExhaustEnabled(
+    bool aEnabled
+)
+{
+    bExhaustEnabled = aEnabled;
+    emit ConfigurationChanged();
+
+    SendCommand(
+        QByteArray("SET,EXHAUST_ENABLED,") +
+        (aEnabled ? "1" : "0")
+    );
+}
+
+void FDeviceController::SetHeadlightsOpen(
+    bool aOpen
+)
+{
+    bHeadlightsOpen = aOpen;
+    emit ConfigurationChanged();
+
+    SendCommand(
+        QByteArray("SET,HEADLIGHT_OPEN,") +
+        (aOpen ? "1" : "0")
+    );
+}
+
+void FDeviceController::SetFansEnabled(
+    bool aEnabled
+)
+{
+    bFansEnabled = aEnabled;
+    emit ConfigurationChanged();
+
+    SendCommand(
+        QByteArray("SET,FANS_ENABLED,") +
+        (aEnabled ? "1" : "0")
+    );
+}
+
+void FDeviceController::SetPendingAccelerometerEnabled(
+    bool aEnabled
+)
+{
+    if (bAccelerometerEnabled == aEnabled)
+    {
+        return;
+    }
+
+    bAccelerometerEnabled = aEnabled;
+    MarkSettingsDirty();
+}
+
+void FDeviceController::SetPendingTriggerThresholdG(
+    double aThresholdG
+)
+{
+    const double ClampedThresholdG =
+        qBound(0.01, aThresholdG, 0.50);
+
+    if (
+        qAbs(
+            TriggerThresholdG -
+            ClampedThresholdG
+        ) < 0.0001
+    )
+    {
+        return;
+    }
+
+    TriggerThresholdG = ClampedThresholdG;
+    MarkSettingsDirty();
+}
+
+void FDeviceController::SetPendingActiveBrightnessPercent(
+    int aBrightnessPercent
+)
+{
+    const int ClampedBrightnessPercent =
+        qBound(0, aBrightnessPercent, 100);
+
+    if (
+        ActiveBrightnessPercent ==
+        ClampedBrightnessPercent
+    )
+    {
+        return;
+    }
+
+    ActiveBrightnessPercent =
+        ClampedBrightnessPercent;
+
+    MarkSettingsDirty();
+}
+
+void FDeviceController::SetPendingDimBrightnessPercent(
+    int aBrightnessPercent
+)
+{
+    const int ClampedBrightnessPercent =
+        qBound(0, aBrightnessPercent, 100);
+
+    if (
+        DimBrightnessPercent ==
+        ClampedBrightnessPercent
+    )
+    {
+        return;
+    }
+
+    DimBrightnessPercent =
+        ClampedBrightnessPercent;
+
+    MarkSettingsDirty();
+}
+
+void FDeviceController::SetPendingFanSpeedPercent(
+    int aSpeedPercent
+)
+{
+    const int ClampedSpeedPercent =
+        qBound(0, aSpeedPercent, 100);
+
+    if (FanSpeedPercent == ClampedSpeedPercent)
+    {
+        return;
+    }
+
+    FanSpeedPercent = ClampedSpeedPercent;
+    MarkSettingsDirty();
+}
+
+void FDeviceController::SetExhaustLight1Channel(int aChannel)
+{
+    ExhaustLight1Channel = qBound(-1, aChannel, 15); MarkSettingsDirty();
+}
+
+void FDeviceController::SetExhaustLight2Channel(int aChannel)
+{
+    ExhaustLight2Channel = qBound(-1, aChannel, 15); MarkSettingsDirty();
+}
+
+void FDeviceController::SetPassiveLightsChannel(int aChannel)
+{
+    PassiveLightsChannel = qBound(-1, aChannel, 15); MarkSettingsDirty();
+}
+
+void FDeviceController::SetTailLightsChannel(int aChannel)
+{
+    TailLightsChannel = qBound(-1, aChannel, 15); MarkSettingsDirty();
+}
+
+void FDeviceController::SetLeftTurnLightsChannel(int aChannel)
+{
+    LeftTurnLightsChannel = qBound(-1, aChannel, 15); MarkSettingsDirty();
+}
+
+void FDeviceController::SetRightTurnLightsChannel(int aChannel)
+{
+    RightTurnLightsChannel = qBound(-1, aChannel, 15); MarkSettingsDirty();
+}
+
+void FDeviceController::SetHeadlightServoChannel(int aChannel)
+{
+    HeadlightServoChannel = qBound(-1, aChannel, 15); MarkSettingsDirty();
+}
+
+void FDeviceController::SetPendingServoClosedPulseUs(int aPulseUs)
+{
+    const int PulseUs = qBound(0, aPulseUs, 4095);
+    if (ServoClosedPulseUs == PulseUs)
+    {
+        return;
+    }
+
+    ServoClosedPulseUs = PulseUs;
+    bServoZeroed = false;
+    MarkSettingsDirty();
+}
+
+void FDeviceController::SetPendingServoOpenPulseUs(int aPulseUs)
+{
+    const int PulseUs = qBound(0, aPulseUs, 4095);
+    if (ServoOpenPulseUs == PulseUs)
+    {
+        return;
+    }
+
+    ServoOpenPulseUs = PulseUs;
+    bServoZeroed = false;
+    MarkSettingsDirty();
+}
+
+void FDeviceController::ZeroServo()
+{
+    bHeadlightsOpen = false;
+    bServoZeroed = true;
+    emit ConfigurationChanged();
+    SendCommand(QByteArrayLiteral("SET,SERVO_ZERO,1"));
+}
+
+void FDeviceController::SetChannelRole(int aChannel, int aRole)
+{
+    if (aChannel < 0 || aChannel > 15 || aRole < 0 || aRole > 8)
+    {
+        return;
+    }
+
+    if (ChannelRoles.value(aChannel, 0) != aRole)
+    {
+        ChannelRoles[aChannel] = aRole;
+        MarkSettingsDirty();
+    }
+}
+
+void FDeviceController::SaveSettings()
+{
+    if (
+        !bConnected ||
+        BluetoothSocketPtr->state() !=
+        QBluetoothSocket::SocketState::ConnectedState
+    )
+    {
+        return;
+    }
+
+    SendCommand(
+        QByteArray("SET,ACCELEROMETER_ENABLED,") +
+        (bAccelerometerEnabled ? "1" : "0")
+    );
+
+    SendCommand(
+        QByteArray("SET,EXHAUST_TRIGGER_G,") +
+        QByteArray::number(TriggerThresholdG, 'f', 3)
+    );
+
+    SendCommand(
+        QByteArray("SET,ACTIVE_BRIGHTNESS,") +
+        QByteArray::number(ActiveBrightnessPercent)
+    );
+
+    SendCommand(
+        QByteArray("SET,DIM_BRIGHTNESS,") +
+        QByteArray::number(DimBrightnessPercent)
+    );
+
+    SendCommand(
+        QByteArray("SET,FAN_SPEED,") +
+        QByteArray::number(FanSpeedPercent)
+    );
+
+    SendCommand(
+        QByteArray("SET,SERVO_CLOSED_PULSE,") +
+        QByteArray::number(ServoClosedPulseUs)
+    );
+
+    SendCommand(
+        QByteArray("SET,SERVO_OPEN_PULSE,") +
+        QByteArray::number(ServoOpenPulseUs)
+    );
+
+    const QList<QPair<const char*, int>> ChannelAssignments = {
+        {"EXHAUST_LIGHT_1_CHANNEL", ExhaustLight1Channel},
+        {"EXHAUST_LIGHT_2_CHANNEL", ExhaustLight2Channel},
+        {"PASSIVE_LIGHTS_CHANNEL", PassiveLightsChannel},
+        {"TAIL_LIGHTS_CHANNEL", TailLightsChannel},
+        {"LEFT_TURN_LIGHTS_CHANNEL", LeftTurnLightsChannel},
+        {"RIGHT_TURN_LIGHTS_CHANNEL", RightTurnLightsChannel},
+        {"HEADLIGHT_SERVO_CHANNEL", HeadlightServoChannel}
+    };
+
+    for (const auto& Assignment : ChannelAssignments)
+    {
+        SendCommand(
+            QByteArray("SET,") + Assignment.first + "," +
+            QByteArray::number(
+                Assignment.second < 0 ? 255 : Assignment.second
+            )
+        );
+    }
+
+    for (int Channel = 0; Channel < ChannelRoles.size(); ++Channel)
+    {
+        SendCommand(
+            QByteArray("SET,CHANNEL_ROLE_") +
+            QByteArray::number(Channel) + "," +
+            QByteArray::number(ChannelRoles[Channel])
+        );
+    }
+
+    SendCommand(
+        QByteArrayLiteral("SAVE")
+    );
+
+    bSettingsDirty = false;
+    emit ConfigurationChanged();
+}
+
+void FDeviceController::ResetDefaults()
+{
+    bAccelerometerEnabled = true;
+    TriggerThresholdG = 0.06;
+    ActiveBrightnessPercent = 100;
+    DimBrightnessPercent = 25;
+    FanSpeedPercent = 70;
+
+    ExhaustLight1Channel = 0;
+    ExhaustLight2Channel = 1;
+    PassiveLightsChannel = 2;
+    TailLightsChannel = 13;
+    LeftTurnLightsChannel = 14;
+    RightTurnLightsChannel = 15;
+    HeadlightServoChannel = 12;
+
+    ServoClosedPulseUs = 102;
+    ServoOpenPulseUs = 512;
+    bServoZeroed = false;
+    ChannelRoles = {
+        1, 2, 3, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 7, 4, 5, 6
+    };
+
+    MarkSettingsDirty();
+}
+
+void FDeviceController::TestExhaust()
+{
+    SendCommand(
+        QByteArrayLiteral("TEST,EXHAUST")
+    );
+}
+
+void FDeviceController::HandleDeviceDiscovered(
+    const QBluetoothDeviceInfo& aDeviceInformationRef
+)
+{
+    const QString FoundDeviceName =
+        aDeviceInformationRef.name();
+
+    if (
+        FoundDeviceName.compare(
+            TargetDeviceName,
+            Qt::CaseInsensitive
+        ) != 0
+    )
+    {
+        return;
+    }
+
+    bTargetDeviceFound = true;
+    DiscoveryAgentPtr->stop();
+
+    ConnectToDevice(
+        aDeviceInformationRef.address().toString(),
+        FoundDeviceName
+    );
+}
+
+void FDeviceController::HandleDiscoveryFinished()
+{
+    if (bTargetDeviceFound)
+    {
+        return;
+    }
+
+    SetConnectionState(
+        false,
+        false,
+        QStringLiteral("Controller not found")
+    );
+}
+
+void FDeviceController::HandleSocketConnected()
+{
+    ReceiveBuffer.clear();
+    ReconnectTimerPtr->stop();
+    bManualDisconnectRequested = false;
+
+    SetConnectionState(
+        true,
+        false,
+        QStringLiteral("ESP32 Connected")
+    );
+
+    SendCommand(
+        QByteArrayLiteral("HELLO,1")
+    );
+
+    SendCommand(
+        QByteArrayLiteral("GET,CONFIG")
+    );
+}
+
+void FDeviceController::HandleSocketDisconnected()
+{
+    SetConnectionState(
+        false,
+        false,
+        QStringLiteral("Disconnected")
+    );
+
+    ScheduleReconnect();
+}
+
+void FDeviceController::HandleSocketReadyRead()
+{
+    ReceiveBuffer.append(
+        BluetoothSocketPtr->readAll()
+    );
+
+    if (
+        ReceiveBuffer.size() >
+        MaximumReceiveBufferSize
+    )
+    {
+        const qsizetype LastNewlineIndex =
+            ReceiveBuffer.lastIndexOf('\n');
+
+        ReceiveBuffer =
+            LastNewlineIndex >= 0
+                ? ReceiveBuffer.mid(
+                    LastNewlineIndex + 1
+                )
+                : QByteArray();
+    }
+
+    qsizetype NewlineIndex = -1;
+
+    while (
+        (
+            NewlineIndex =
+            ReceiveBuffer.indexOf('\n')
+        ) >= 0
+    )
+    {
+        QByteArray Line =
+            ReceiveBuffer.left(NewlineIndex).trimmed();
+
+        ReceiveBuffer.remove(
+            0,
+            NewlineIndex + 1
+        );
+
+        if (!Line.isEmpty())
+        {
+            ParseLine(Line);
+        }
+    }
+}
+
+void FDeviceController::HandleSocketError()
+{
+    const QString ErrorText =
+        BluetoothSocketPtr->errorString();
+
+    SetConnectionState(
+        false,
+        false,
+        ErrorText.isEmpty()
+            ? QStringLiteral("Bluetooth connection failed")
+            : ErrorText
+    );
+
+    ScheduleReconnect();
+}
+
+void FDeviceController::BeginBluetoothScan()
+{
+    bTargetDeviceFound = false;
+
+    SetConnectionState(
+        false,
+        true,
+        QStringLiteral("Searching for controller...")
+    );
+
+    DiscoveryAgentPtr->start(
+        QBluetoothDeviceDiscoveryAgent::ClassicMethod
+    );
+}
+
+void FDeviceController::ConnectToDevice(
+    const QString& aAddress,
+    const QString& aName
+)
+{
+    DeviceName =
+        aName.isEmpty()
+            ? TargetDeviceName
+            : aName;
+
+    emit DeviceInformationChanged();
+
+    SetConnectionState(
+        false,
+        false,
+        QStringLiteral("Connecting...")
+    );
+
+    BluetoothSocketPtr->connectToService(
+        QBluetoothAddress(aAddress),
+        SerialPortServiceUuid
+    );
+}
+
+void FDeviceController::SendCommand(
+    const QByteArray& aCommandRef
+)
+{
+    if (
+        !bConnected ||
+        BluetoothSocketPtr->state() !=
+        QBluetoothSocket::SocketState::ConnectedState
+    )
+    {
+        return;
+    }
+
+    QByteArray Command = aCommandRef.trimmed();
+    Command.append('\n');
+
+    BluetoothSocketPtr->write(Command);
+}
+
+void FDeviceController::ParseLine(
+    const QByteArray& aLineRef
+)
+{
+    const QList<QByteArray> Fields =
+        aLineRef.split(',');
+
+    if (Fields.isEmpty())
+    {
+        return;
+    }
+
+    if (Fields[0] == "HELLO")
+    {
+        ParseHello(Fields);
+    }
+    else if (Fields[0] == "CFG")
+    {
+        ParseConfiguration(Fields);
+    }
+    else if (Fields[0] == "TEL")
+    {
+        ParseTelemetry(Fields);
+    }
+}
+
+void FDeviceController::ParseHello(
+    const QList<QByteArray>& aFieldsRef
+)
+{
+    if (aFieldsRef.size() < 4)
+    {
+        return;
+    }
+
+    DeviceName =
+        QString::fromUtf8(aFieldsRef[2]);
+
+    FirmwareVersion =
+        QString::fromUtf8(aFieldsRef[3]);
+
+    emit DeviceInformationChanged();
+}
+
+void FDeviceController::ParseConfiguration(
+    const QList<QByteArray>& aFieldsRef
+)
+{
+    if (aFieldsRef.size() < 11)
+    {
+        return;
+    }
+
+    bPassiveLightsEnabled =
+        aFieldsRef[1].toInt() != 0;
+
+    bActiveLightsEnabled =
+        aFieldsRef[2].toInt() != 0;
+
+    bExhaustEnabled =
+        aFieldsRef[3].toInt() != 0;
+
+    bHeadlightsOpen =
+        aFieldsRef[4].toInt() != 0;
+
+    bFansEnabled =
+        aFieldsRef[5].toInt() != 0;
+
+    bAccelerometerEnabled =
+        aFieldsRef[6].toInt() != 0;
+
+    TriggerThresholdG =
+        aFieldsRef[7].toDouble();
+
+    ActiveBrightnessPercent =
+        aFieldsRef[8].toInt();
+
+    DimBrightnessPercent =
+        aFieldsRef[9].toInt();
+
+    FanSpeedPercent =
+        aFieldsRef[10].toInt();
+
+    if (aFieldsRef.size() >= 18)
+    {
+        const auto ParseChannel = [](const QByteArray& aValue) {
+            const int Channel = aValue.toInt();
+            return Channel == 255 ? -1 : qBound(0, Channel, 15);
+        };
+
+        ExhaustLight1Channel = ParseChannel(aFieldsRef[11]);
+        ExhaustLight2Channel = ParseChannel(aFieldsRef[12]);
+        PassiveLightsChannel = ParseChannel(aFieldsRef[13]);
+        TailLightsChannel = ParseChannel(aFieldsRef[14]);
+        LeftTurnLightsChannel = ParseChannel(aFieldsRef[15]);
+        RightTurnLightsChannel = ParseChannel(aFieldsRef[16]);
+        HeadlightServoChannel = ParseChannel(aFieldsRef[17]);
+    }
+
+    if (aFieldsRef.size() >= 34)
+    {
+        for (int Channel = 0; Channel < 16; ++Channel)
+        {
+            ChannelRoles[Channel] = qBound(
+                0,
+                aFieldsRef[18 + Channel].toInt(),
+                8
+            );
+        }
+    }
+
+    if (aFieldsRef.size() >= 36)
+    {
+        ServoClosedPulseUs = qBound(0, aFieldsRef[34].toInt(), 4095);
+        ServoOpenPulseUs = qBound(0, aFieldsRef[35].toInt(), 4095);
+        bServoZeroed = false;
+    }
+
+    bSettingsDirty = false;
+    emit ConfigurationChanged();
+}
+
+void FDeviceController::ParseTelemetry(
+    const QList<QByteArray>& aFieldsRef
+)
+{
+    if (aFieldsRef.size() < 18)
+    {
+        return;
+    }
+
+    SteeringPulseUs =
+        aFieldsRef[2].toInt() != 0
+            ? aFieldsRef[3].toInt()
+            : 0;
+
+    SteeringPercent =
+        aFieldsRef[4].toInt();
+
+    ThrottlePulseUs =
+        aFieldsRef[5].toInt() != 0
+            ? aFieldsRef[6].toInt()
+            : 0;
+
+    ThrottlePercent =
+        aFieldsRef[7].toInt();
+
+    ForwardAccelerationG =
+        aFieldsRef[8].toDouble();
+
+    FilteredForwardAccelerationG =
+        aFieldsRef[9].toDouble();
+
+    SideAccelerationG =
+        aFieldsRef[10].toDouble();
+
+    VerticalAccelerationG =
+        aFieldsRef[11].toDouble();
+
+    GyroscopeXDps =
+        aFieldsRef[12].toDouble();
+
+    GyroscopeYDps =
+        aFieldsRef[13].toDouble();
+
+    GyroscopeZDps =
+        aFieldsRef[14].toDouble();
+
+    TurnDirection =
+        QString::fromUtf8(aFieldsRef[15]);
+
+    bBrakeActive =
+        aFieldsRef[16].toInt() != 0;
+
+    bExhaustPulseActive =
+        aFieldsRef[17].toInt() != 0;
+
+    emit TelemetryChanged();
+}
+
+void FDeviceController::SetConnectionState(
+    bool aConnected,
+    bool aScanning,
+    const QString& aStatusRef
+)
+{
+    bConnected = aConnected;
+    bScanning = aScanning;
+    ConnectionStatus = aStatusRef;
+
+    emit ConnectionChanged();
+}
+
+void FDeviceController::MarkSettingsDirty()
+{
+    bSettingsDirty = true;
+    emit ConfigurationChanged();
+}
+
+void FDeviceController::ScheduleReconnect()
+{
+    if (
+        bManualDisconnectRequested ||
+        ReconnectTimerPtr->isActive()
+    )
+    {
+        return;
+    }
+
+    ReconnectTimerPtr->start();
+}
