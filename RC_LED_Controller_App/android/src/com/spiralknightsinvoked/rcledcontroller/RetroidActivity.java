@@ -93,7 +93,7 @@ public class RetroidActivity extends QtActivity {
             return KeyEvent.KEYCODE_ENTER;
         }
         if (keyCode == KeyEvent.KEYCODE_BUTTON_B) {
-            return KeyEvent.KEYCODE_B;
+            return KeyEvent.KEYCODE_A;
         }
         if (keyCode == KeyEvent.KEYCODE_BUTTON_X) {
             return KeyEvent.KEYCODE_X;

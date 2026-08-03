@@ -42,6 +42,44 @@ FocusScope {
         focusActiveCategory()
     }
 
+    function activeCategoryTab() {
+        if (root.activeCategory === 0) {
+            return accelerometerTab
+        } else if (root.activeCategory === 1) {
+            return outputTab
+        } else if (root.activeCategory === 2) {
+            return channelTab
+        } else if (root.activeCategory === 3) {
+            return servoTab
+        } else if (root.activeCategory === 4) {
+            return gyroTab
+        } else if (root.activeCategory === 5) {
+            return liveTab
+        }
+
+        return diagnosticsTab
+    }
+
+    function categoryMenuHasFocus() {
+        return backButton.activeFocus ||
+            accelerometerTab.activeFocus ||
+            outputTab.activeFocus ||
+            channelTab.activeFocus ||
+            servoTab.activeFocus ||
+            gyroTab.activeFocus ||
+            liveTab.activeFocus ||
+            diagnosticsTab.activeFocus
+    }
+
+    function handleBack() {
+        if (categoryMenuHasFocus()) {
+            root.goBack()
+            return
+        }
+
+        activeCategoryTab().forceActiveFocus()
+    }
+
     function focusActiveCategory() {
         if (root.activeCategory === 0) {
             accelerometerRow.forceActiveFocus()
@@ -174,7 +212,7 @@ FocusScope {
                    event.key === Qt.Key_Back ||
                    event.key === Qt.Key_Escape ||
                    event.key === Qt.Key_Backspace) {
-            root.goBack()
+            root.handleBack()
             event.accepted = true
         }
     }
@@ -224,7 +262,7 @@ FocusScope {
                         }
 
                         Text {
-                            text: "A Back  •  LT / RT Select menu"
+                            text: "A Select  •  B Back  •  LT / RT Select menu"
                             color: Theme.textSecondary
                             font.family: Theme.fontFamily
                             font.pixelSize: 11
@@ -974,7 +1012,8 @@ FocusScope {
                                                         event.accepted = true
                                                     } else if (event.key === Qt.Key_Back ||
                                                                event.key === Qt.Key_Escape ||
-                                                               event.key === Qt.Key_Backspace) {
+                                                               event.key === Qt.Key_Backspace ||
+                                                               event.key === Qt.Key_A) {
                                                         settingsRolePopup.close()
                                                         event.accepted = true
                                                     }
@@ -1504,7 +1543,7 @@ FocusScope {
             Item { Layout.fillWidth: true }
 
             Text {
-                text: "A Back   Y Save   X Restore defaults"
+                text: "A Select   B Back   Y Save   X Restore defaults"
                 color: Theme.textSecondary
                 font.family: Theme.fontFamily
                 font.pixelSize: 10

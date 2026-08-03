@@ -256,7 +256,8 @@ FocusScope {
                                     }
 
                                     Keys.onPressed: function(event) {
-                                        if (event.key === Qt.Key_Back ||
+                                        if (event.key === Qt.Key_A ||
+                                            event.key === Qt.Key_Back ||
                                             event.key === Qt.Key_Escape ||
                                             event.key === Qt.Key_Backspace) {
                                             popup.close()
@@ -452,8 +453,7 @@ FocusScope {
                                                  } else if (event.key === Qt.Key_Return ||
                                                      event.key === Qt.Key_Enter ||
                                                      event.key === Qt.Key_Space ||
-                                                     event.key === Qt.Key_A ||
-                                                    event.key === Qt.Key_B) {
+                                                     event.key === Qt.Key_B) {
                                                     roleBox.currentIndex =
                                                         roleList.currentIndex
                                                     DeviceController.SetChannelRole(
@@ -463,7 +463,8 @@ FocusScope {
                                                     rolePopup.close()
                                                     channelRow.forceActiveFocus()
                                                     event.accepted = true
-                                                } else if (event.key === Qt.Key_Back ||
+                                                } else if (event.key === Qt.Key_A ||
+                                                           event.key === Qt.Key_Back ||
                                                            event.key === Qt.Key_Escape ||
                                                            event.key === Qt.Key_Backspace) {
                                                     rolePopup.close()
