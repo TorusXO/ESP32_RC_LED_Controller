@@ -185,6 +185,7 @@ FocusScope {
                     Layout.preferredWidth: 230
                     Layout.alignment: Qt.AlignVCenter
                     spacing: 12
+                    clip: true
 
                     ActionButton {
                         id: backButton
@@ -196,15 +197,19 @@ FocusScope {
                     }
 
                     Column {
+                        width: parent.width - 54
                         anchors.verticalCenter: parent.verticalCenter
                         spacing: 3
+                        clip: true
 
                         Text {
+                            width: parent.width
                             text: "Settings  /  " + root.categoryLabels[root.activeCategory]
                             color: Theme.textPrimary
                             font.family: Theme.fontFamily
                             font.pixelSize: 20
                             font.weight: Font.DemiBold
+                            elide: Text.ElideRight
                         }
 
                         Text {
@@ -292,14 +297,7 @@ FocusScope {
 
                     }
 
-                    ScrollBar.horizontal: ScrollBar {
-                        policy: ScrollBar.AsNeeded
-                        contentItem: Rectangle {
-                            implicitHeight: 3
-                            radius: 2
-                            color: Theme.track
-                        }
-                    }
+                    ScrollBar.horizontal: InsetHorizontalScrollBar {}
                 }
             }
         }
@@ -319,23 +317,16 @@ FocusScope {
                     anchors.rightMargin: 18
                     anchors.topMargin: 16
                     anchors.bottomMargin: 16
-                    contentWidth: width
+                    contentWidth: width - 18
                     contentHeight: accelerometerContent.implicitHeight
                     clip: true
                     boundsBehavior: Flickable.StopAtBounds
 
-                    ScrollBar.vertical: ScrollBar {
-                        policy: ScrollBar.AsNeeded
-                        contentItem: Rectangle {
-                            implicitWidth: 4
-                            radius: 2
-                            color: Theme.track
-                        }
-                    }
+                    ScrollBar.vertical: InsetVerticalScrollBar {}
 
                     ColumnLayout {
                         id: accelerometerContent
-                        width: accelerometerFlickable.width
+                        width: accelerometerFlickable.contentWidth
                         spacing: 14
 
                         ControlRow {
@@ -365,6 +356,8 @@ FocusScope {
                             ValueSlider {
                                 id: thresholdSlider
                                 anchors.fill: parent
+                                anchors.leftMargin: 10
+                                anchors.rightMargin: 10
                                 from: 0.01
                                 to: 0.50
                                 stepSize: 0.01
@@ -541,23 +534,16 @@ FocusScope {
                     anchors.rightMargin: 18
                     anchors.topMargin: 16
                     anchors.bottomMargin: 16
-                    contentWidth: width
+                    contentWidth: width - 18
                     contentHeight: outputLevelsContent.implicitHeight
                     clip: true
                     boundsBehavior: Flickable.StopAtBounds
 
-                    ScrollBar.vertical: ScrollBar {
-                        policy: ScrollBar.AsNeeded
-                        contentItem: Rectangle {
-                            implicitWidth: 4
-                            radius: 2
-                            color: Theme.track
-                        }
-                    }
+                    ScrollBar.vertical: InsetVerticalScrollBar {}
 
                     ColumnLayout {
                         id: outputLevelsContent
-                        width: outputLevelsFlickable.width
+                        width: outputLevelsFlickable.contentWidth
                         spacing: 12
 
                         Column {
@@ -690,20 +676,13 @@ FocusScope {
                             boundsBehavior: Flickable.StopAtBounds
                             currentIndex: 0
 
-                            ScrollBar.vertical: ScrollBar {
-                                policy: ScrollBar.AsNeeded
-                                contentItem: Rectangle {
-                                    implicitWidth: 4
-                                    radius: 2
-                                    color: Theme.track
-                                }
-                            }
+                            ScrollBar.vertical: InsetVerticalScrollBar {}
 
                             delegate: Rectangle {
                                 id: settingsChannelRow
                                 required property int index
 
-                                width: settingsChannelList.width
+                                width: Math.max(0, settingsChannelList.width - 18)
                                 height: 48
                                 radius: 8
                                 activeFocusOnTab: true
@@ -934,7 +913,7 @@ FocusScope {
                                                  highlightMoveDuration: 0
 
                                                  highlight: Rectangle {
-                                                     width: roleList.width
+                                                     width: Math.max(0, roleList.width - 18)
                                                      height: 34
                                                      radius: 7
                                                      color: Theme.accentMuted
@@ -989,9 +968,7 @@ FocusScope {
                                                     }
                                                 }
 
-                                                ScrollBar.vertical: ScrollBar {
-                                                    policy: ScrollBar.AsNeeded
-                                                }
+                                                ScrollBar.vertical: InsetVerticalScrollBar {}
                                             }
 
                                             background: Rectangle {
@@ -1020,23 +997,16 @@ FocusScope {
                     anchors.rightMargin: 18
                     anchors.topMargin: 16
                     anchors.bottomMargin: 16
-                    contentWidth: width
+                    contentWidth: width - 18
                     contentHeight: servoContent.implicitHeight
                     clip: true
                     boundsBehavior: Flickable.StopAtBounds
 
-                    ScrollBar.vertical: ScrollBar {
-                        policy: ScrollBar.AsNeeded
-                        contentItem: Rectangle {
-                            implicitWidth: 4
-                            radius: 2
-                            color: Theme.track
-                        }
-                    }
+                    ScrollBar.vertical: InsetVerticalScrollBar {}
 
                     ColumnLayout {
                         id: servoContent
-                        width: parent.width
+                        width: servoFlickable.contentWidth
                         spacing: 14
 
                         Column {
@@ -1226,14 +1196,16 @@ FocusScope {
                     id: diagnosticsFlickable
                     anchors.fill: parent
                     anchors.margins: 18
-                    contentWidth: width
+                    contentWidth: width - 18
                     contentHeight: diagnosticsContent.implicitHeight
                     clip: true
                     boundsBehavior: Flickable.StopAtBounds
 
+                    ScrollBar.vertical: InsetVerticalScrollBar {}
+
                     ColumnLayout {
                         id: diagnosticsContent
-                        width: diagnosticsFlickable.width
+                        width: diagnosticsFlickable.contentWidth
                         spacing: 14
 
                         Column {
@@ -1455,7 +1427,7 @@ FocusScope {
         radius: 12
         border.width: valuePanel.highlighted ? 2 : 0
         border.color: Theme.accent
-        implicitHeight: 96
+        implicitHeight: 110
 
         ColumnLayout {
             anchors.fill: parent
@@ -1463,11 +1435,11 @@ FocusScope {
             anchors.rightMargin: 14
             anchors.topMargin: 13
             anchors.bottomMargin: 13
-            spacing: 16
+            spacing: 14
 
             RowLayout {
                 Layout.fillWidth: true
-                Layout.preferredHeight: 33
+                Layout.preferredHeight: 40
 
                 Column {
                     Layout.fillWidth: true
@@ -1512,7 +1484,7 @@ FocusScope {
             Item {
                 id: valueContent
                 Layout.fillWidth: true
-                Layout.preferredHeight: 18
+                Layout.preferredHeight: 24
             }
         }
     }

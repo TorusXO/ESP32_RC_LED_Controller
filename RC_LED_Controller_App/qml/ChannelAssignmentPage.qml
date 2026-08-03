@@ -143,25 +143,13 @@ FocusScope {
                         model: 16
                         boundsBehavior: Flickable.StopAtBounds
 
-                        ScrollBar.vertical: ScrollBar {
-                            policy: ScrollBar.AsNeeded
-                            contentItem: Rectangle {
-                                implicitWidth: 4
-                                radius: 2
-                                color: Theme.track
-                            }
-                            background: Rectangle {
-                                implicitWidth: 4
-                                radius: 2
-                                color: Theme.background
-                            }
-                        }
+                        ScrollBar.vertical: InsetVerticalScrollBar {}
 
                         delegate: Rectangle {
                             id: channelRow
                             required property int index
 
-                            width: channelList.width
+                            width: Math.max(0, channelList.width - 18)
                             height: 48
                             radius: 8
                             activeFocusOnTab: true
@@ -410,7 +398,7 @@ FocusScope {
                                              highlightMoveDuration: 0
 
                                              highlight: Rectangle {
-                                                 width: roleList.width
+                                                 width: Math.max(0, roleList.width - 18)
                                                  height: 34
                                                  radius: 7
                                                  color: Theme.accentMuted
@@ -484,9 +472,7 @@ FocusScope {
                                                 }
                                             }
 
-                                            ScrollBar.vertical: ScrollBar {
-                                                policy: ScrollBar.AsNeeded
-                                            }
+                                            ScrollBar.vertical: InsetVerticalScrollBar {}
                                         }
 
                                         background: Rectangle {
