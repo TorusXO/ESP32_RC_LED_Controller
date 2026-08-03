@@ -76,5 +76,12 @@ Slider {
         color: "#ffffff"
         border.width: root.activeFocus ? 2 : 0
         border.color: Theme.accent
+
+        Behavior on x {
+            NumberAnimation {
+                duration: 100
+                easing.type: Easing.OutCubic
+            }
+        }
     }
 }

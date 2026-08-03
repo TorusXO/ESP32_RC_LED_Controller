@@ -51,5 +51,20 @@ Button {
         opacity: root.enabled
             ? (root.down ? 0.78 : 1.0)
             : 0.4
+
+        Behavior on color {
+            ColorAnimation { duration: 120 }
+        }
+
+        Behavior on border.color {
+            ColorAnimation { duration: 100 }
+        }
+
+        Behavior on border.width {
+            NumberAnimation {
+                duration: 100
+                easing.type: Easing.OutCubic
+            }
+        }
     }
 }

@@ -419,6 +419,13 @@ FocusScope {
                     clip: true
                     boundsBehavior: Flickable.StopAtBounds
 
+                    Behavior on contentY {
+                        NumberAnimation {
+                            duration: 180
+                            easing.type: Easing.OutCubic
+                        }
+                    }
+
                     ScrollBar.vertical: InsetVerticalScrollBar {}
 
                     ColumnLayout {
@@ -627,6 +634,13 @@ FocusScope {
                     clip: true
                     boundsBehavior: Flickable.StopAtBounds
 
+                    Behavior on contentY {
+                        NumberAnimation {
+                            duration: 180
+                            easing.type: Easing.OutCubic
+                        }
+                    }
+
                     ScrollBar.vertical: InsetVerticalScrollBar {}
 
                     ColumnLayout {
@@ -762,6 +776,13 @@ FocusScope {
                             spacing: 6
                             model: 16
                             boundsBehavior: Flickable.StopAtBounds
+
+                            Behavior on contentY {
+                                NumberAnimation {
+                                    duration: 180
+                                    easing.type: Easing.OutCubic
+                                }
+                            }
                             currentIndex: 0
 
                             ScrollBar.vertical: InsetVerticalScrollBar {}
@@ -1091,6 +1112,13 @@ FocusScope {
                     clip: true
                     boundsBehavior: Flickable.StopAtBounds
 
+                    Behavior on contentY {
+                        NumberAnimation {
+                            duration: 180
+                            easing.type: Easing.OutCubic
+                        }
+                    }
+
                     ScrollBar.vertical: InsetVerticalScrollBar {}
 
                     ColumnLayout {
@@ -1200,6 +1228,13 @@ FocusScope {
                     contentHeight: gyroContent.implicitHeight
                     clip: true
                     boundsBehavior: Flickable.StopAtBounds
+
+                    Behavior on contentY {
+                        NumberAnimation {
+                            duration: 180
+                            easing.type: Easing.OutCubic
+                        }
+                    }
 
                     ScrollBar.vertical: InsetVerticalScrollBar {}
 
@@ -1478,6 +1513,13 @@ FocusScope {
                     contentHeight: diagnosticsContent.implicitHeight
                     clip: true
                     boundsBehavior: Flickable.StopAtBounds
+
+                    Behavior on contentY {
+                        NumberAnimation {
+                            duration: 180
+                            easing.type: Easing.OutCubic
+                        }
+                    }
 
                     ScrollBar.vertical: InsetVerticalScrollBar {}
 

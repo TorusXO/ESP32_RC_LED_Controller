@@ -18,12 +18,31 @@ FocusScope {
         passiveRow.forceActiveFocus()
     }
 
+    function scrollRightColumn(direction) {
+        var maximum = Math.max(
+            0,
+            rightColumn.contentHeight - rightColumn.height
+        )
+        rightColumn.contentY = Math.max(
+            0,
+            Math.min(
+                maximum,
+                rightColumn.contentY + direction * 120
+            )
+        )
+    }
+
     Keys.onPressed: function(event) {
         if (event.key === Qt.Key_F1) {
             root.openSettings()
             event.accepted = true
         } else if (event.key === Qt.Key_F2) {
             root.openSettings()
+            event.accepted = true
+        } else if (coolingRow.activeFocus &&
+                   (event.key === Qt.Key_Down ||
+                    event.key === Qt.Key_PageDown)) {
+            root.scrollRightColumn(1)
             event.accepted = true
         } else if (event.key === Qt.Key_Back ||
                    event.key === Qt.Key_Escape ||
@@ -280,6 +299,13 @@ FocusScope {
                 activeFocusOnTab: true
                 boundsBehavior: Flickable.StopAtBounds
 
+                Behavior on contentY {
+                    NumberAnimation {
+                        duration: 180
+                        easing.type: Easing.OutCubic
+                    }
+                }
+
                 Keys.onPressed: function(event) {
                     if (event.key === Qt.Key_Up ||
                         event.key === Qt.Key_Down ||
@@ -404,25 +430,29 @@ FocusScope {
 
                     Card {
                         Layout.fillWidth: true
-                        Layout.preferredHeight: 166
+                        Layout.topMargin: 14
+                        Layout.preferredHeight: 178
 
                         ColumnLayout {
                             anchors.fill: parent
-                            anchors.leftMargin: 18
-                            anchors.rightMargin: 18
-                            anchors.topMargin: 16
-                            anchors.bottomMargin: 16
-                            spacing: 14
+                            anchors.leftMargin: 20
+                            anchors.rightMargin: 20
+                            anchors.topMargin: 18
+                            anchors.bottomMargin: 18
+                            spacing: 12
 
                             ControlRow {
                                 id: coolingRow
                                 Layout.fillWidth: true
+                                Layout.leftMargin: 2
+                                Layout.rightMargin: 2
+                                switchRightMargin: 8
                                 checked: DeviceController.fansEnabled
                                 title: "Cooling fans"
                                 subtitle: "ESC and motor cooling"
                                 KeyNavigation.up: headlightsApplyButton
                                 KeyNavigation.left: exhaustRow
-                                KeyNavigation.down: rightColumn
+                                KeyNavigation.down: null
 
                                 onToggled: function(checked) {
                                     DeviceController.SetFansEnabled(checked)
@@ -431,6 +461,8 @@ FocusScope {
 
                             Rectangle {
                                 Layout.fillWidth: true
+                                Layout.leftMargin: 2
+                                Layout.rightMargin: 2
                                 Layout.preferredHeight: 33
                                 color: Theme.surface
                                 radius: 10
