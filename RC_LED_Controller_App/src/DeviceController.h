@@ -87,6 +87,24 @@ class FDeviceController final : public QObject
     )
 
     Q_PROPERTY(
+        int accelerometerForwardAxis
+        READ GetAccelerometerForwardAxis
+        NOTIFY ConfigurationChanged
+    )
+
+    Q_PROPERTY(
+        bool accelerometerForwardInverted
+        READ IsAccelerometerForwardInverted
+        NOTIFY ConfigurationChanged
+    )
+
+    Q_PROPERTY(
+        double accelerometerToleranceG
+        READ GetAccelerometerToleranceG
+        NOTIFY ConfigurationChanged
+    )
+
+    Q_PROPERTY(
         int activeBrightnessPercent
         READ GetActiveBrightnessPercent
         NOTIFY ConfigurationChanged
@@ -244,6 +262,9 @@ public:
     bool AreFansEnabled() const;
     bool IsAccelerometerEnabled() const;
     double GetTriggerThresholdG() const;
+    int GetAccelerometerForwardAxis() const;
+    bool IsAccelerometerForwardInverted() const;
+    double GetAccelerometerToleranceG() const;
     int GetActiveBrightnessPercent() const;
     int GetDimBrightnessPercent() const;
     int GetFanSpeedPercent() const;
@@ -306,6 +327,9 @@ public slots:
 
     void SetPendingAccelerometerEnabled(bool aEnabled);
     void SetPendingTriggerThresholdG(double aThresholdG);
+    void SetPendingAccelerometerForwardAxis(int aAxis);
+    void SetPendingAccelerometerForwardInverted(bool aInverted);
+    void SetPendingAccelerometerToleranceG(double aToleranceG);
     void SetPendingActiveBrightnessPercent(int aBrightnessPercent);
     void SetPendingDimBrightnessPercent(int aBrightnessPercent);
     void SetPendingFanSpeedPercent(int aSpeedPercent);
@@ -413,6 +437,9 @@ private:
     bool bAccelerometerEnabled = true;
 
     double TriggerThresholdG = 0.06;
+    int AccelerometerForwardAxis = 0;
+    bool bAccelerometerForwardInverted = false;
+    double AccelerometerToleranceG = 0.02;
     int ActiveBrightnessPercent = 100;
     int DimBrightnessPercent = 25;
     int FanSpeedPercent = 70;

@@ -45,6 +45,7 @@ qt_add_qml_module(
         qml/components/ControlRow.qml
         qml/components/InsetHorizontalScrollBar.qml
         qml/components/InsetVerticalScrollBar.qml
+        qml/components/OptionSelector.qml
         qml/components/SegmentedControl.qml
         qml/components/Theme.js
         qml/components/ValueSlider.qml

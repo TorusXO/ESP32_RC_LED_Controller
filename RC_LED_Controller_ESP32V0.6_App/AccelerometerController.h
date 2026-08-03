@@ -54,6 +54,8 @@ public:
         const FAccelerometerAxisConfiguration& aAxisConfigurationRef
     );
 
+    void SetForwardToleranceG(float aToleranceG);
+
     bool CalibrateStationary(
         uint16_t aSampleCount = 200,
         uint16_t aSampleDelayMs = 5
@@ -118,6 +120,7 @@ private:
     float StationaryGyroscopeOffsetXDps = 0.0f;
     float StationaryGyroscopeOffsetYDps = 0.0f;
     float StationaryGyroscopeOffsetZDps = 0.0f;
+    float ForwardToleranceG = 0.02f;
 
     uint32_t LastSampleTimeMs = 0;
 

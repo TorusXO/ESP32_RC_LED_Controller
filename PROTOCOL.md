@@ -10,7 +10,7 @@ HELLO,1,RC_LED_CONTROLLER,0.6
 ```
 
 ```text
-CFG,passive,active,exhaust,headlightOpen,fans,accelerometer,triggerG,activeBrightness,dimBrightness,fanSpeed,exhaust1Channel,exhaust2Channel,passiveChannel,tailChannel,leftTurnChannel,rightTurnChannel,servoChannel,channelRole0,...,channelRole15,servoClosedPulse,servoOpenPulse
+CFG,passive,active,exhaust,headlightOpen,fans,accelerometer,triggerG,activeBrightness,dimBrightness,fanSpeed,exhaust1Channel,exhaust2Channel,passiveChannel,tailChannel,leftTurnChannel,rightTurnChannel,servoChannel,channelRole0,...,channelRole15,servoClosedPulse,servoOpenPulse,forwardAxis,forwardInverted,accelerometerToleranceG
 ```
 
 ```text
@@ -44,6 +44,9 @@ SET,HEADLIGHT_OPEN,0|1
 SET,FANS_ENABLED,0|1
 SET,ACCELEROMETER_ENABLED,0|1
 SET,EXHAUST_TRIGGER_G,0.010..0.500
+SET,ACCELEROMETER_FORWARD_AXIS,0..2
+SET,ACCELEROMETER_FORWARD_INVERTED,0|1
+SET,ACCELEROMETER_TOLERANCE_G,0.000..0.200
 SET,ACTIVE_BRIGHTNESS,0..100
 SET,DIM_BRIGHTNESS,0..100
 SET,FAN_SPEED,0..100

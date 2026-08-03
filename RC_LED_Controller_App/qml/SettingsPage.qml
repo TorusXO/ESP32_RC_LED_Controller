@@ -17,6 +17,7 @@ FocusScope {
         "Output levels",
         "Channel setup",
         "Servo calibration",
+        "Gyro settings",
         "Live values",
         "Diagnostics"
     ]
@@ -54,8 +55,10 @@ FocusScope {
         } else if (root.activeCategory === 3) {
             servoClosedSlider.forceActiveFocus()
         } else if (root.activeCategory === 4) {
-            livePanel.forceActiveFocus()
+            gyroForwardAxisSelector.forceActiveFocus()
         } else if (root.activeCategory === 5) {
+            livePanel.forceActiveFocus()
+        } else if (root.activeCategory === 6) {
             diagnosticsButton.forceActiveFocus()
         } else {
             livePanel.forceActiveFocus()
@@ -70,8 +73,8 @@ FocusScope {
     function cycleCategory(direction) {
         var category = root.activeCategory + direction
         if (category < 0) {
-            category = 5
-        } else if (category > 5) {
+            category = 6
+        } else if (category > 6) {
             category = 0
         }
         root.activateCategory(category)
@@ -135,7 +138,15 @@ FocusScope {
                     servoFlickable.contentY + amount
                 )
             )
-        } else if (root.activeCategory === 5) {
+        } else if (root.activeCategory === 4) {
+            gyroFlickable.contentY = Math.max(
+                0,
+                Math.min(
+                    Math.max(0, gyroFlickable.contentHeight - gyroFlickable.height),
+                    gyroFlickable.contentY + amount
+                )
+            )
+        } else if (root.activeCategory === 6) {
             diagnosticsFlickable.contentY = Math.max(
                 0,
                 Math.min(
@@ -270,16 +281,26 @@ FocusScope {
                             category: 3
                             label: "Servo calibration"
                             KeyNavigation.left: channelTab
-                            KeyNavigation.right: liveTab
+                            KeyNavigation.right: gyroTab
                             KeyNavigation.down: servoClosedSlider
                             onActivated: root.activateCategory(category)
                         }
 
                         SettingsTab {
-                            id: liveTab
+                            id: gyroTab
                             category: 4
-                            label: "Live values"
+                            label: "Gyro settings"
                             KeyNavigation.left: servoTab
+                            KeyNavigation.right: liveTab
+                            KeyNavigation.down: gyroForwardAxisSelector
+                            onActivated: root.activateCategory(category)
+                        }
+
+                        SettingsTab {
+                            id: liveTab
+                            category: 5
+                            label: "Live values"
+                            KeyNavigation.left: gyroTab
                             KeyNavigation.right: diagnosticsTab
                             KeyNavigation.down: livePanel
                             onActivated: root.activateCategory(category)
@@ -287,7 +308,7 @@ FocusScope {
 
                         SettingsTab {
                             id: diagnosticsTab
-                            category: 5
+                            category: 6
                             label: "Diagnostics"
                             KeyNavigation.left: liveTab
                             KeyNavigation.right: accelerometerTab
@@ -1085,8 +1106,197 @@ FocusScope {
             }
 
             Card {
-                id: livePanel
+                id: gyroPanel
                 highlighted: root.activeCategory === 4
+
+                Flickable {
+                    id: gyroFlickable
+                    anchors.fill: parent
+                    anchors.leftMargin: 18
+                    anchors.rightMargin: 18
+                    anchors.topMargin: 16
+                    anchors.bottomMargin: 16
+                    contentWidth: width - 18
+                    contentHeight: gyroContent.implicitHeight
+                    clip: true
+                    boundsBehavior: Flickable.StopAtBounds
+
+                    ScrollBar.vertical: InsetVerticalScrollBar {}
+
+                    ColumnLayout {
+                        id: gyroContent
+                        width: gyroFlickable.contentWidth
+                        spacing: 14
+
+                        Column {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 38
+                            spacing: 4
+
+                            Text {
+                                text: "Gyro settings"
+                                color: Theme.textPrimary
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 17
+                                font.weight: Font.DemiBold
+                            }
+
+                            Text {
+                                text: "Configure the MPU6050 orientation and ignore small sensor noise"
+                                color: Theme.textSecondary
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 11
+                            }
+                        }
+
+                        Rectangle {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 76
+                            color: Theme.surface
+                            radius: 12
+
+                            RowLayout {
+                                anchors.fill: parent
+                                anchors.leftMargin: 14
+                                anchors.rightMargin: 14
+                                spacing: 12
+
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 4
+
+                                    Text {
+                                        text: "Forward axis"
+                                        color: Theme.textPrimary
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: 14
+                                        font.weight: Font.Medium
+                                    }
+
+                                    Text {
+                                        text: "Which accelerometer axis points toward the front of the car"
+                                        color: Theme.textSecondary
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: 10
+                                        wrapMode: Text.WordWrap
+                                    }
+                                }
+
+                                OptionSelector {
+                                    id: gyroForwardAxisSelector
+                                    Layout.preferredWidth: 190
+                                    Layout.preferredHeight: 34
+                                    options: ["X axis", "Y axis", "Z axis"]
+                                    currentIndex: DeviceController.accelerometerForwardAxis
+                                    KeyNavigation.up: gyroTab
+                                    KeyNavigation.down: gyroForwardDirectionSelector
+
+                                    onSelectionChanged: function(index) {
+                                        DeviceController.SetPendingAccelerometerForwardAxis(index)
+                                    }
+                                }
+                            }
+                        }
+
+                        Rectangle {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 76
+                            color: Theme.surface
+                            radius: 12
+
+                            RowLayout {
+                                anchors.fill: parent
+                                anchors.leftMargin: 14
+                                anchors.rightMargin: 14
+                                spacing: 12
+
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 4
+
+                                    Text {
+                                        text: "Forward direction"
+                                        color: Theme.textPrimary
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: 14
+                                        font.weight: Font.Medium
+                                    }
+
+                                    Text {
+                                        text: "Choose which sign represents forward acceleration"
+                                        color: Theme.textSecondary
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: 10
+                                        wrapMode: Text.WordWrap
+                                    }
+                                }
+
+                                OptionSelector {
+                                    id: gyroForwardDirectionSelector
+                                    Layout.preferredWidth: 190
+                                    Layout.preferredHeight: 34
+                                    options: ["Positive", "Negative"]
+                                    currentIndex: DeviceController.accelerometerForwardInverted
+                                        ? 1
+                                        : 0
+                                    KeyNavigation.up: gyroForwardAxisSelector
+                                    KeyNavigation.down: gyroToleranceRow.slider
+
+                                    onSelectionChanged: function(index) {
+                                        DeviceController.SetPendingAccelerometerForwardInverted(index === 1)
+                                    }
+                                }
+                            }
+                        }
+
+                        SettingsSliderRow {
+                            id: gyroToleranceRow
+                            Layout.fillWidth: true
+                            upControl: gyroForwardDirectionSelector
+                            downControl: livePanel
+                            title: "Accelerometer tolerance"
+                            subtitle: "Ignore small readings caused by sensor noise"
+                            valueText: DeviceController.accelerometerToleranceG.toFixed(2) + " g"
+                            value: DeviceController.accelerometerToleranceG
+                            from: 0.00
+                            to: 0.20
+                            stepSize: 0.01
+
+                            onValueMoved: function(value) {
+                                DeviceController.SetPendingAccelerometerToleranceG(value)
+                            }
+                        }
+
+                        Text {
+                            Layout.fillWidth: true
+                            text: "The filtered forward acceleration is used by the exhaust trigger."
+                            color: Theme.textSecondary
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 10
+                            wrapMode: Text.WordWrap
+                        }
+                    }
+
+                    Connections {
+                        target: DeviceController
+
+                        function onConfigurationChanged() {
+                            gyroForwardAxisSelector.currentIndex =
+                                DeviceController.accelerometerForwardAxis
+                            gyroForwardDirectionSelector.currentIndex =
+                                DeviceController.accelerometerForwardInverted
+                                    ? 1
+                                    : 0
+                            gyroToleranceRow.slider.value =
+                                DeviceController.accelerometerToleranceG
+                        }
+                    }
+                }
+            }
+
+            Card {
+                id: livePanel
+                highlighted: root.activeCategory === 5
                 activeFocusOnTab: true
                 focus: false
                 KeyNavigation.up: liveTab
@@ -1178,7 +1388,7 @@ FocusScope {
 
             Card {
                 id: diagnosticsPanel
-                highlighted: root.activeCategory === 5
+                highlighted: root.activeCategory === 6
 
                 Flickable {
                     id: diagnosticsFlickable
@@ -1311,8 +1521,10 @@ FocusScope {
                             : root.activeCategory === 3
                                 ? zeroServoButton
                                 : root.activeCategory === 4
-                                    ? livePanel
-                                    : diagnosticsButton
+                                    ? gyroToleranceRow.slider
+                                    : root.activeCategory === 5
+                                        ? livePanel
+                                        : diagnosticsButton
                 KeyNavigation.right: saveSettingsButton
                 onClicked: DeviceController.ResetDefaults()
             }
@@ -1332,8 +1544,10 @@ FocusScope {
                             : root.activeCategory === 3
                                 ? zeroServoButton
                                 : root.activeCategory === 4
-                                    ? livePanel
-                                    : diagnosticsButton
+                                    ? gyroToleranceRow.slider
+                                    : root.activeCategory === 5
+                                        ? livePanel
+                                        : diagnosticsButton
                 enabled: DeviceController.settingsDirty
                 onClicked: DeviceController.SaveSettings()
             }
@@ -1409,6 +1623,9 @@ FocusScope {
         property string subtitle: ""
         property string valueText: ""
         property real value: 0
+        property real from: 0
+        property real to: 100
+        property real stepSize: 1
         property color fillColor: Theme.accent
         property Item upControl: null
         property Item downControl: null
@@ -1476,9 +1693,9 @@ FocusScope {
             ValueSlider {
                 id: settingsSlider
                 Layout.fillWidth: true
-                from: 0
-                to: 100
-                stepSize: 1
+                from: settingsRow.from
+                to: settingsRow.to
+                stepSize: settingsRow.stepSize
                 value: settingsRow.value
                 fillColor: settingsRow.fillColor
                 KeyNavigation.up: settingsRow.upControl

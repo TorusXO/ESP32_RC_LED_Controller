@@ -124,6 +124,18 @@ bool FAccelerometerController::SetAxisConfiguration(
     return true;
 }
 
+void FAccelerometerController::SetForwardToleranceG(
+    float aToleranceG
+)
+{
+    ForwardToleranceG = constrain(
+        aToleranceG,
+        0.0f,
+        0.20f
+    );
+    ResetFilter();
+}
+
 bool FAccelerometerController::CalibrateStationary(
     uint16_t aSampleCount,
     uint16_t aSampleDelayMs
@@ -369,10 +381,15 @@ bool FAccelerometerController::Update(uint32_t aCurrentTimeMs)
             ZG
         );
 
+    const float ToleratedForwardAccelerationG =
+        fabsf(ForwardAccelerationG) < ForwardToleranceG
+            ? 0.0f
+            : ForwardAccelerationG;
+
     if (!bFilterInitialized)
     {
         AccelerationState.FilteredForwardAccelerationG =
-            ForwardAccelerationG;
+            ToleratedForwardAccelerationG;
 
         bFilterInitialized = true;
     }
@@ -384,7 +401,7 @@ bool FAccelerometerController::Update(uint32_t aCurrentTimeMs)
                 (1.0f - FORWARD_ACCELERATION_FILTER_ALPHA)
             ) +
             (
-                ForwardAccelerationG *
+                ToleratedForwardAccelerationG *
                 FORWARD_ACCELERATION_FILTER_ALPHA
             );
     }

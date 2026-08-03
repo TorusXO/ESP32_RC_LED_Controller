@@ -189,6 +189,21 @@ double FDeviceController::GetTriggerThresholdG() const
     return TriggerThresholdG;
 }
 
+int FDeviceController::GetAccelerometerForwardAxis() const
+{
+    return AccelerometerForwardAxis;
+}
+
+bool FDeviceController::IsAccelerometerForwardInverted() const
+{
+    return bAccelerometerForwardInverted;
+}
+
+double FDeviceController::GetAccelerometerToleranceG() const
+{
+    return AccelerometerToleranceG;
+}
+
 int FDeviceController::GetActiveBrightnessPercent() const
 {
     return ActiveBrightnessPercent;
@@ -585,6 +600,55 @@ void FDeviceController::SetPendingTriggerThresholdG(
     MarkSettingsDirty();
 }
 
+void FDeviceController::SetPendingAccelerometerForwardAxis(
+    int aAxis
+)
+{
+    const int ClampedAxis = qBound(0, aAxis, 2);
+
+    if (AccelerometerForwardAxis == ClampedAxis)
+    {
+        return;
+    }
+
+    AccelerometerForwardAxis = ClampedAxis;
+    MarkSettingsDirty();
+}
+
+void FDeviceController::SetPendingAccelerometerForwardInverted(
+    bool aInverted
+)
+{
+    if (bAccelerometerForwardInverted == aInverted)
+    {
+        return;
+    }
+
+    bAccelerometerForwardInverted = aInverted;
+    MarkSettingsDirty();
+}
+
+void FDeviceController::SetPendingAccelerometerToleranceG(
+    double aToleranceG
+)
+{
+    const double ClampedToleranceG =
+        qBound(0.0, aToleranceG, 0.20);
+
+    if (
+        qAbs(
+            AccelerometerToleranceG -
+            ClampedToleranceG
+        ) < 0.0001
+    )
+    {
+        return;
+    }
+
+    AccelerometerToleranceG = ClampedToleranceG;
+    MarkSettingsDirty();
+}
+
 void FDeviceController::SetPendingActiveBrightnessPercent(
     int aBrightnessPercent
 )
@@ -748,6 +812,21 @@ void FDeviceController::SaveSettings()
     );
 
     SendCommand(
+        QByteArray("SET,ACCELEROMETER_FORWARD_AXIS,") +
+        QByteArray::number(AccelerometerForwardAxis)
+    );
+
+    SendCommand(
+        QByteArray("SET,ACCELEROMETER_FORWARD_INVERTED,") +
+        (bAccelerometerForwardInverted ? "1" : "0")
+    );
+
+    SendCommand(
+        QByteArray("SET,ACCELEROMETER_TOLERANCE_G,") +
+        QByteArray::number(AccelerometerToleranceG, 'f', 3)
+    );
+
+    SendCommand(
         QByteArray("SET,ACTIVE_BRIGHTNESS,") +
         QByteArray::number(ActiveBrightnessPercent)
     );
@@ -813,6 +892,9 @@ void FDeviceController::ResetDefaults()
 {
     bAccelerometerEnabled = true;
     TriggerThresholdG = 0.06;
+    AccelerometerForwardAxis = 0;
+    bAccelerometerForwardInverted = false;
+    AccelerometerToleranceG = 0.02;
     ActiveBrightnessPercent = 100;
     DimBrightnessPercent = 25;
     FanSpeedPercent = 70;
@@ -1170,6 +1252,22 @@ void FDeviceController::ParseConfiguration(
         ServoClosedPulseUs = qBound(0, aFieldsRef[34].toInt(), 4095);
         ServoOpenPulseUs = qBound(0, aFieldsRef[35].toInt(), 4095);
         bServoZeroed = false;
+    }
+
+    if (aFieldsRef.size() >= 39)
+    {
+        AccelerometerForwardAxis = qBound(
+            0,
+            aFieldsRef[36].toInt(),
+            2
+        );
+        bAccelerometerForwardInverted =
+            aFieldsRef[37].toInt() != 0;
+        AccelerometerToleranceG = qBound(
+            0.0,
+            aFieldsRef[38].toDouble(),
+            0.20
+        );
     }
 
     bSettingsDirty = false;
