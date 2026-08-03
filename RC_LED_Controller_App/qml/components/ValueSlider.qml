@@ -6,17 +6,38 @@ Slider {
     id: root
 
     property color fillColor: Theme.accent
+    signal dpadMoved(real value)
 
     implicitHeight: 24
     activeFocusOnTab: true
 
+    function moveByStep(direction) {
+        var step = root.stepSize > 0
+            ? root.stepSize
+            : (root.to - root.from) * 0.01
+        var next = root.value + direction * step
+        next = Math.max(root.from, Math.min(root.to, next))
+
+        if (root.stepSize > 0) {
+            next = root.from + Math.round((next - root.from) / step) * step
+            next = Math.max(root.from, Math.min(root.to, next))
+        }
+
+        if (Math.abs(next - root.value) < 0.000001) {
+            return
+        }
+
+        root.value = next
+        root.dpadMoved(next)
+    }
+
     Keys.onLeftPressed: function(event) {
-        decrement()
+        root.moveByStep(-1)
         event.accepted = true
     }
 
     Keys.onRightPressed: function(event) {
-        increment()
+        root.moveByStep(1)
         event.accepted = true
     }
 

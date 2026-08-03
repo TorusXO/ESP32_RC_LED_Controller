@@ -201,6 +201,7 @@ Popup {
                 stepSize: 1
                 value: row.value
                 onMoved: row.valueMoved(value)
+                onDpadMoved: row.valueMoved(value)
             }
         }
     }

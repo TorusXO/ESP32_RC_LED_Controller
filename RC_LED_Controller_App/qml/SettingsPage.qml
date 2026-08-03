@@ -1745,6 +1745,7 @@ FocusScope {
                 KeyNavigation.right: settingsRow.rightControl
 
                 onMoved: settingsRow.valueMoved(value)
+                onDpadMoved: settingsRow.valueMoved(value)
             }
         }
     }
@@ -1827,6 +1828,7 @@ FocusScope {
                 KeyNavigation.down: servoRow.downControl
 
                 onMoved: servoRow.valueMoved(value)
+                onDpadMoved: servoRow.valueMoved(value)
             }
         }
     }
