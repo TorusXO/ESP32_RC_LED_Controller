@@ -20,6 +20,7 @@ public:
 
     bool ConsumeConfigurationChanged();
     bool ConsumeExhaustTestRequested();
+    bool ConsumeDiagnosticsRequested();
 
     void SendHello();
     void SendConfiguration();
@@ -42,6 +43,18 @@ public:
         const char* aTurnDirectionPtr,
         bool aBrakeActive,
         bool aExhaustPulseActive
+    );
+
+    void SendDiagnostics(
+        bool aPcaConnected,
+        uint8_t aPcaAddress,
+        uint8_t aPcaMode1,
+        bool aAccelerometerConnected,
+        bool aAccelerometerCalibrated,
+        uint8_t aAccelerometerAddress,
+        uint8_t aAccelerometerWhoAmI,
+        bool aSteeringHasSignal,
+        bool aThrottleHasSignal
     );
 
 
@@ -77,4 +90,5 @@ private:
     bool bHadBluetoothClient = false;
     bool bConfigurationChanged = false;
     bool bExhaustTestRequested = false;
+    bool bDiagnosticsRequested = false;
 };

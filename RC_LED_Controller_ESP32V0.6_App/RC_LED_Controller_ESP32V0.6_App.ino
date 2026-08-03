@@ -414,6 +414,21 @@ void loop()
             false
         );
 
+    if (ControllerProtocol.ConsumeDiagnosticsRequested())
+    {
+        ControllerProtocol.SendDiagnostics(
+            LightingController.IsConnected(),
+            LightingController.GetDeviceAddress(),
+            LightingController.ReadMode1Register(),
+            AccelerometerController.IsConnected(),
+            AccelerometerController.IsCalibrated(),
+            AccelerometerController.GetDeviceAddress(),
+            AccelerometerController.GetWhoAmI(),
+            SteeringSnapshot.bHasSignal,
+            ThrottleSnapshot.bHasSignal
+        );
+    }
+
     AccelerometerController.Update(
         CurrentTimeMs
     );

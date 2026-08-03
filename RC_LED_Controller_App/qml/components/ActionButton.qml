@@ -40,7 +40,7 @@ Button {
     background: Rectangle {
         radius: 11
         color: root.primary
-            ? Theme.accent
+            ? (root.down ? Theme.accent : Theme.accentMuted)
             : Theme.panel
 
         border.width: root.activeFocus ? 2 : 1

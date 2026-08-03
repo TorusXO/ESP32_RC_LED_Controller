@@ -12,6 +12,14 @@ FocusScope {
     activeFocusOnTab: true
 
     property int activeCategory: 0
+    readonly property var categoryLabels: [
+        "Exhaust accelerometer",
+        "Output levels",
+        "Channel setup",
+        "Servo calibration",
+        "Live values",
+        "Diagnostics"
+    ]
     readonly property var settingsRoles: [
         "Unused",
         "Exhaust light 1",
@@ -47,6 +55,8 @@ FocusScope {
             servoClosedSlider.forceActiveFocus()
         } else if (root.activeCategory === 4) {
             livePanel.forceActiveFocus()
+        } else if (root.activeCategory === 5) {
+            diagnosticsButton.forceActiveFocus()
         } else {
             livePanel.forceActiveFocus()
         }
@@ -60,8 +70,8 @@ FocusScope {
     function cycleCategory(direction) {
         var category = root.activeCategory + direction
         if (category < 0) {
-            category = 4
-        } else if (category > 4) {
+            category = 5
+        } else if (category > 5) {
             category = 0
         }
         root.activateCategory(category)
@@ -125,6 +135,14 @@ FocusScope {
                     servoFlickable.contentY + amount
                 )
             )
+        } else if (root.activeCategory === 5) {
+            diagnosticsFlickable.contentY = Math.max(
+                0,
+                Math.min(
+                    Math.max(0, diagnosticsFlickable.contentHeight - diagnosticsFlickable.height),
+                    diagnosticsFlickable.contentY + amount
+                )
+            )
         }
     }
 
@@ -141,7 +159,8 @@ FocusScope {
         } else if (event.key === Qt.Key_PageDown) {
             root.scrollActiveContent(1)
             event.accepted = true
-        } else if (event.key === Qt.Key_Back ||
+        } else if (event.key === Qt.Key_A ||
+                   event.key === Qt.Key_Back ||
                    event.key === Qt.Key_Escape ||
                    event.key === Qt.Key_Backspace) {
             root.goBack()
@@ -181,7 +200,7 @@ FocusScope {
                         spacing: 3
 
                         Text {
-                            text: "Settings"
+                            text: "Settings  /  " + root.categoryLabels[root.activeCategory]
                             color: Theme.textPrimary
                             font.family: Theme.fontFamily
                             font.pixelSize: 20
@@ -256,8 +275,18 @@ FocusScope {
                             category: 4
                             label: "Live values"
                             KeyNavigation.left: servoTab
-                            KeyNavigation.right: accelerometerTab
+                            KeyNavigation.right: diagnosticsTab
                             KeyNavigation.down: livePanel
+                            onActivated: root.activateCategory(category)
+                        }
+
+                        SettingsTab {
+                            id: diagnosticsTab
+                            category: 5
+                            label: "Diagnostics"
+                            KeyNavigation.left: liveTab
+                            KeyNavigation.right: accelerometerTab
+                            KeyNavigation.down: diagnosticsButton
                             onActivated: root.activateCategory(category)
                         }
 
@@ -757,8 +786,23 @@ FocusScope {
                                             settingsChannelRow.forceActiveFocus()
                                         }
 
-                                        Keys.onPressed: function(event) {
-                                            if (event.key === Qt.Key_Return ||
+                                                 Keys.onPressed: function(event) {
+                                                     var nativeKey = event.nativeVirtualKey !== undefined
+                                                         ? event.nativeVirtualKey
+                                                         : event.nativeScanCode
+                                                     if (event.key === Qt.Key_Up ||
+                                                         event.key === Qt.Key_Left ||
+                                                         nativeKey === 19 ||
+                                                         nativeKey === 21) {
+                                                         roleList.moveRole(-1)
+                                                         event.accepted = true
+                                                     } else if (event.key === Qt.Key_Down ||
+                                                         event.key === Qt.Key_Right ||
+                                                         nativeKey === 20 ||
+                                                         nativeKey === 22) {
+                                                         roleList.moveRole(1)
+                                                         event.accepted = true
+                                                     } else if (event.key === Qt.Key_Return ||
                                                 event.key === Qt.Key_Enter ||
                                                 event.key === Qt.Key_Space ||
                                                 event.key === Qt.Key_B) {
@@ -798,15 +842,19 @@ FocusScope {
                                         }
 
                                         delegate: ItemDelegate {
-                                            id: settingsRoleDelegate
-                                            width: roleBox.width
-                                            height: 34
-                                             highlighted: settingsRolePopup.pendingIndex === index
+                                             id: settingsRoleDelegate
+                                             width: roleBox.width
+                                             height: 34
+                                             property bool activeRole:
+                                                 settingsRolePopup.pendingIndex === index
+                                             highlighted: activeRole
 
                                             contentItem: Text {
                                                 leftPadding: 10
                                                 text: modelData
-                                                color: Theme.textPrimary
+                                                 color: settingsRoleDelegate.activeRole
+                                                     ? Theme.textPrimary
+                                                     : Theme.textSecondary
                                                 font.family: Theme.fontFamily
                                                 font.pixelSize: 11
                                                 verticalAlignment: Text.AlignVCenter
@@ -814,12 +862,9 @@ FocusScope {
 
                                             background: Rectangle {
                                                 radius: 7
-                                                color: settingsRoleDelegate.highlighted
-                                                    ? Theme.accentMuted
-                                                    : Theme.panel
-                                                border.width: settingsRoleDelegate.highlighted ? 1 : 0
-                                                border.color: Theme.accent
-                                            }
+                                                 color: "transparent"
+                                                 border.width: 0
+                                             }
                                         }
 
                                         popup: Popup {
@@ -838,19 +883,28 @@ FocusScope {
                                                     roleList.currentIndex,
                                                     ListView.Contain
                                                 )
-                                                roleList.forceActiveFocus()
+                                                 Qt.callLater(function() {
+                                                     roleList.forceActiveFocus()
+                                                 })
                                             }
 
                                             onClosed: settingsChannelRow.forceActiveFocus()
 
                                             Keys.priority: Keys.BeforeItem
                                             Keys.onPressed: function(event) {
-                                                if (event.key === Qt.Key_Up ||
-                                                    event.key === Qt.Key_Left) {
+                                                 var nativeKey = event.nativeVirtualKey !== undefined
+                                                     ? event.nativeVirtualKey
+                                                     : event.nativeScanCode
+                                                 if (event.key === Qt.Key_Up ||
+                                                     event.key === Qt.Key_Left ||
+                                                     nativeKey === 19 ||
+                                                     nativeKey === 21) {
                                                     roleList.moveRole(-1)
                                                     event.accepted = true
-                                                } else if (event.key === Qt.Key_Down ||
-                                                    event.key === Qt.Key_Right) {
+                                                 } else if (event.key === Qt.Key_Down ||
+                                                     event.key === Qt.Key_Right ||
+                                                     nativeKey === 20 ||
+                                                     nativeKey === 22) {
                                                     roleList.moveRole(1)
                                                     event.accepted = true
                                                 } else if (event.key === Qt.Key_PageUp) {
@@ -872,10 +926,31 @@ FocusScope {
                                                     contentHeight,
                                                     9 * 34
                                                 )
-                                                model: settingsRolePopup.visible
-                                                    ? roleBox.delegateModel
-                                                    : null
-                                                currentIndex: 0
+                                                 model: settingsRolePopup.visible
+                                                     ? roleBox.delegateModel
+                                                     : null
+                                                 currentIndex: 0
+                                                 highlightFollowsCurrentItem: true
+                                                 highlightMoveDuration: 0
+
+                                                 highlight: Rectangle {
+                                                     width: roleList.width
+                                                     height: 34
+                                                     radius: 7
+                                                     color: Theme.accentMuted
+                                                     border.width: 2
+                                                     border.color: Theme.accent
+                                                     z: -1
+
+                                                     Rectangle {
+                                                         anchors.left: parent.left
+                                                         anchors.top: parent.top
+                                                         anchors.bottom: parent.bottom
+                                                         width: 3
+                                                         radius: 2
+                                                         color: Theme.accent
+                                                     }
+                                                 }
 
                                                 function moveRole(delta) {
                                                     var next = Math.max(
@@ -887,11 +962,12 @@ FocusScope {
                                                     )
                                                     currentIndex = next
                                                     settingsRolePopup.pendingIndex = next
-                                                    positionViewAtIndex(
-                                                        next,
-                                                        ListView.Contain
-                                                    )
-                                                }
+                                                     positionViewAtIndex(
+                                                         next,
+                                                         ListView.Contain
+                                                     )
+                                                     roleList.forceActiveFocus()
+                                                 }
 
                                                 Keys.onPressed: function(event) {
                                                     if (event.key === Qt.Key_Return ||
@@ -1142,6 +1218,97 @@ FocusScope {
                 }
             }
 
+            Card {
+                id: diagnosticsPanel
+                highlighted: root.activeCategory === 5
+
+                Flickable {
+                    id: diagnosticsFlickable
+                    anchors.fill: parent
+                    anchors.margins: 18
+                    contentWidth: width
+                    contentHeight: diagnosticsContent.implicitHeight
+                    clip: true
+                    boundsBehavior: Flickable.StopAtBounds
+
+                    ColumnLayout {
+                        id: diagnosticsContent
+                        width: diagnosticsFlickable.width
+                        spacing: 14
+
+                        Column {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 38
+                            spacing: 4
+
+                            Text {
+                                text: "Run diagnostics"
+                                color: Theme.textPrimary
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 17
+                                font.weight: Font.DemiBold
+                            }
+
+                            Text {
+                                text: "Ask the ESP32 which I2C devices and RC channels it can see"
+                                color: Theme.textSecondary
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 11
+                            }
+                        }
+
+                        ActionButton {
+                            id: diagnosticsButton
+                            text: DeviceController.diagnosticsPending
+                                ? "Checking..."
+                                : "Run diagnostics"
+                            primary: true
+                            enabled: DeviceController.connected &&
+                                !DeviceController.diagnosticsPending
+                            KeyNavigation.up: diagnosticsTab
+                            KeyNavigation.down: resetDefaultsButton
+                            onClicked: DeviceController.RunDiagnostics()
+                        }
+
+                        Rectangle {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 170
+                            color: Theme.surface
+                            radius: 12
+
+                            ColumnLayout {
+                                anchors.fill: parent
+                                anchors.margins: 14
+                                spacing: 8
+
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: DeviceController.diagnosticsSummary
+                                    color: Theme.textPrimary
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 12
+                                    font.weight: Font.Medium
+                                    wrapMode: Text.WordWrap
+                                }
+
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: "PCA9685: " + DeviceController.pcaStatusText +
+                                        "\nAccelerometer: " + DeviceController.accelerometerStatusText +
+                                        "\nRC channels: CH1 " + DeviceController.steeringSignalStatus +
+                                        "  •  CH2 " + DeviceController.throttleSignalStatus
+                                    color: Theme.textSecondary
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 11
+                                    lineHeight: 1.2
+                                    wrapMode: Text.WordWrap
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
         }
 
         RowLayout {
@@ -1149,22 +1316,22 @@ FocusScope {
             Layout.preferredHeight: 44
 
                         Text {
-                            text: DeviceController.settingsDirty
-                                ? DeviceController.connected
-                                    ? "Unsaved changes"
-                                    : "Unsaved changes • Connect controller to save"
-                                : "Values are stored on the ESP32 controller"
-                color: DeviceController.settingsDirty
-                    ? Theme.warning
-                    : Theme.textSecondary
+                            Layout.fillWidth: true
+                            text: DeviceController.connected
+                                ? DeviceController.deviceStatusSummary
+                                : DeviceController.connectionStatus
+                            color: DeviceController.settingsDirty
+                                ? Theme.warning
+                                : Theme.textSecondary
                 font.family: Theme.fontFamily
                 font.pixelSize: 10
+                elide: Text.ElideRight
             }
 
             Item { Layout.fillWidth: true }
 
             Text {
-                text: "Y Save   X Restore defaults"
+                text: "A Back   Y Save   X Restore defaults"
                 color: Theme.textSecondary
                 font.family: Theme.fontFamily
                 font.pixelSize: 10
@@ -1183,7 +1350,9 @@ FocusScope {
                             ? settingsChannelList.itemAtIndex(15)
                             : root.activeCategory === 3
                                 ? zeroServoButton
-                                : livePanel
+                                : root.activeCategory === 4
+                                    ? livePanel
+                                    : diagnosticsButton
                 KeyNavigation.right: saveSettingsButton
                 onClicked: DeviceController.ResetDefaults()
             }
@@ -1202,7 +1371,9 @@ FocusScope {
                             ? settingsChannelList.itemAtIndex(15)
                             : root.activeCategory === 3
                                 ? zeroServoButton
-                                : livePanel
+                                : root.activeCategory === 4
+                                    ? livePanel
+                                    : diagnosticsButton
                 enabled: DeviceController.settingsDirty
                 onClicked: DeviceController.SaveSettings()
             }

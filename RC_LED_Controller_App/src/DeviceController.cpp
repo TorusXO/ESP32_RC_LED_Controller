@@ -300,6 +300,108 @@ bool FDeviceController::IsExhaustPulseActive() const
     return bExhaustPulseActive;
 }
 
+bool FDeviceController::HasSteeringSignal() const
+{
+    return bSteeringSignalPresent;
+}
+
+bool FDeviceController::HasThrottleSignal() const
+{
+    return bThrottleSignalPresent;
+}
+
+bool FDeviceController::IsPcaConnected() const
+{
+    return bPcaConnected;
+}
+
+int FDeviceController::GetPcaAddress() const
+{
+    return PcaAddress;
+}
+
+int FDeviceController::GetPcaMode1() const
+{
+    return PcaMode1;
+}
+
+bool FDeviceController::IsAccelerometerConnected() const
+{
+    return bAccelerometerConnected;
+}
+
+bool FDeviceController::IsAccelerometerCalibrated() const
+{
+    return bAccelerometerCalibrated;
+}
+
+int FDeviceController::GetAccelerometerAddress() const
+{
+    return AccelerometerAddress;
+}
+
+int FDeviceController::GetAccelerometerWhoAmI() const
+{
+    return AccelerometerWhoAmI;
+}
+
+bool FDeviceController::AreDiagnosticsPending() const
+{
+    return bDiagnosticsPending;
+}
+
+const QString& FDeviceController::GetDiagnosticsSummary() const
+{
+    return DiagnosticsSummary;
+}
+
+QString FDeviceController::GetPcaStatusText() const
+{
+    return bPcaConnected
+        ? QStringLiteral("OK at 0x%1 (MODE1 0x%2)")
+            .arg(PcaAddress, 2, 16, QLatin1Char('0'))
+            .arg(PcaMode1, 2, 16, QLatin1Char('0'))
+        : QStringLiteral("NOT RESPONDING at 0x%1")
+            .arg(PcaAddress, 2, 16, QLatin1Char('0'));
+}
+
+QString FDeviceController::GetAccelerometerStatusText() const
+{
+    return bAccelerometerConnected
+        ? QStringLiteral("OK at 0x%1 (WHO_AM_I 0x%2)%3")
+            .arg(AccelerometerAddress, 2, 16, QLatin1Char('0'))
+            .arg(AccelerometerWhoAmI, 2, 16, QLatin1Char('0'))
+            .arg(bAccelerometerCalibrated ? QStringLiteral(", calibrated") : QString())
+        : QStringLiteral("NOT RESPONDING at 0x%1")
+            .arg(AccelerometerAddress, 2, 16, QLatin1Char('0'));
+}
+
+QString FDeviceController::GetSteeringSignalStatus() const
+{
+    return bSteeringSignalPresent ? QStringLiteral("OK") : QStringLiteral("NO SIGNAL");
+}
+
+QString FDeviceController::GetThrottleSignalStatus() const
+{
+    return bThrottleSignalPresent ? QStringLiteral("OK") : QStringLiteral("NO SIGNAL");
+}
+
+QString FDeviceController::GetDeviceStatusSummary() const
+{
+    const QString Status =
+        !bConnected
+            ? ConnectionStatus
+            : QStringLiteral("ESP32 OK  •  PCA %1  •  MPU %2  •  CH1 %3  •  CH2 %4")
+                .arg(bPcaConnected ? QStringLiteral("OK") : QStringLiteral("OFFLINE"))
+                .arg(bAccelerometerConnected ? QStringLiteral("OK") : QStringLiteral("OFFLINE"))
+                .arg(GetSteeringSignalStatus())
+                .arg(GetThrottleSignalStatus());
+
+    return bSettingsDirty
+        ? QStringLiteral("Unsaved changes  •  ") + Status
+        : Status;
+}
+
 void FDeviceController::StartScan()
 {
     if (
@@ -741,6 +843,19 @@ void FDeviceController::TestExhaust()
     );
 }
 
+void FDeviceController::RunDiagnostics()
+{
+    if (!bConnected)
+    {
+        return;
+    }
+
+    bDiagnosticsPending = true;
+    DiagnosticsSummary = QStringLiteral("Checking ESP32 hardware...");
+    emit DiagnosticsChanged();
+    SendCommand(QByteArrayLiteral("GET,DIAGNOSTICS"));
+}
+
 void FDeviceController::HandleDeviceDiscovered(
     const QBluetoothDeviceInfo& aDeviceInformationRef
 )
@@ -800,6 +915,8 @@ void FDeviceController::HandleSocketConnected()
     SendCommand(
         QByteArrayLiteral("GET,CONFIG")
     );
+
+    RunDiagnostics();
 }
 
 void FDeviceController::HandleSocketDisconnected()
@@ -957,6 +1074,10 @@ void FDeviceController::ParseLine(
     {
         ParseTelemetry(Fields);
     }
+    else if (Fields[0] == "DIAG")
+    {
+        ParseDiagnostics(Fields);
+    }
 }
 
 void FDeviceController::ParseHello(
@@ -1064,16 +1185,22 @@ void FDeviceController::ParseTelemetry(
         return;
     }
 
+    bSteeringSignalPresent =
+        aFieldsRef[2].toInt() != 0;
+
     SteeringPulseUs =
-        aFieldsRef[2].toInt() != 0
+        bSteeringSignalPresent
             ? aFieldsRef[3].toInt()
             : 0;
 
     SteeringPercent =
         aFieldsRef[4].toInt();
 
+    bThrottleSignalPresent =
+        aFieldsRef[5].toInt() != 0;
+
     ThrottlePulseUs =
-        aFieldsRef[5].toInt() != 0
+        bThrottleSignalPresent
             ? aFieldsRef[6].toInt()
             : 0;
 
@@ -1111,6 +1238,36 @@ void FDeviceController::ParseTelemetry(
         aFieldsRef[17].toInt() != 0;
 
     emit TelemetryChanged();
+    emit DiagnosticsChanged();
+}
+
+void FDeviceController::ParseDiagnostics(
+    const QList<QByteArray>& aFieldsRef
+)
+{
+    if (aFieldsRef.size() < 10)
+    {
+        return;
+    }
+
+    bPcaConnected = aFieldsRef[1].toInt() != 0;
+    PcaAddress = aFieldsRef[2].toInt();
+    PcaMode1 = aFieldsRef[3].toInt();
+    bAccelerometerConnected = aFieldsRef[4].toInt() != 0;
+    bAccelerometerCalibrated = aFieldsRef[5].toInt() != 0;
+    AccelerometerAddress = aFieldsRef[6].toInt();
+    AccelerometerWhoAmI = aFieldsRef[7].toInt();
+    bSteeringSignalPresent = aFieldsRef[8].toInt() != 0;
+    bThrottleSignalPresent = aFieldsRef[9].toInt() != 0;
+    bDiagnosticsPending = false;
+
+    DiagnosticsSummary = QStringLiteral("Diagnostics complete: %1")
+        .arg(bPcaConnected && bAccelerometerConnected
+            ? QStringLiteral("ESP32 sees both I2C boards")
+            : QStringLiteral("one or more boards are not responding"));
+
+    emit DiagnosticsChanged();
+    emit TelemetryChanged();
 }
 
 void FDeviceController::SetConnectionState(
@@ -1123,7 +1280,17 @@ void FDeviceController::SetConnectionState(
     bScanning = aScanning;
     ConnectionStatus = aStatusRef;
 
+    if (!aConnected)
+    {
+        bDiagnosticsPending = false;
+        bPcaConnected = false;
+        bAccelerometerConnected = false;
+        bAccelerometerCalibrated = false;
+        DiagnosticsSummary = QStringLiteral("Controller disconnected");
+    }
+
     emit ConnectionChanged();
+    emit DiagnosticsChanged();
 }
 
 void FDeviceController::MarkSettingsDirty()

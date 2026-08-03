@@ -33,7 +33,8 @@ FocusScope {
     }
 
     Keys.onPressed: function(event) {
-        if (event.key === Qt.Key_Back ||
+        if (event.key === Qt.Key_A ||
+            event.key === Qt.Key_Back ||
             event.key === Qt.Key_Escape ||
             event.key === Qt.Key_Backspace) {
             root.goBack()
@@ -316,12 +317,16 @@ FocusScope {
                                         id: roleDelegate
                                         width: roleBox.width
                                         height: 34
-                                         highlighted: rolePopup.pendingIndex === index
+                                        property bool activeRole:
+                                            rolePopup.pendingIndex === index
+                                        highlighted: activeRole
 
                                         contentItem: Text {
                                             leftPadding: 10
                                             text: modelData
-                                            color: Theme.textPrimary
+                                            color: roleDelegate.activeRole
+                                                ? Theme.textPrimary
+                                                : Theme.textSecondary
                                             font.family: Theme.fontFamily
                                             font.pixelSize: 11
                                             verticalAlignment: Text.AlignVCenter
@@ -329,9 +334,20 @@ FocusScope {
 
                                         background: Rectangle {
                                             radius: 7
-                                            color: roleDelegate.highlighted
-                                                ? Theme.surface
-                                                : Theme.panel
+                                            color: "transparent"
+                                            border.width: 0
+                                            border.color: Theme.accent
+
+                                            Rectangle {
+                                                anchors.left: parent.left
+                                                anchors.top: parent.top
+                                                anchors.bottom: parent.bottom
+                                                width: 3
+                                                radius: 2
+                                                color: roleDelegate.activeRole
+                                                    ? Theme.accent
+                                                    : "transparent"
+                                            }
                                         }
                                     }
 
@@ -351,18 +367,27 @@ FocusScope {
                                                  roleList.currentIndex,
                                                  ListView.Contain
                                              )
-                                             roleList.forceActiveFocus()
+                                              Qt.callLater(function() {
+                                                  roleList.forceActiveFocus()
+                                              })
                                          }
                                          onClosed: channelRow.forceActiveFocus()
 
                                          Keys.priority: Keys.BeforeItem
                                          Keys.onPressed: function(event) {
-                                             if (event.key === Qt.Key_Up ||
-                                                 event.key === Qt.Key_Left) {
+                                              var nativeKey = event.nativeVirtualKey !== undefined
+                                                  ? event.nativeVirtualKey
+                                                  : event.nativeScanCode
+                                              if (event.key === Qt.Key_Up ||
+                                                  event.key === Qt.Key_Left ||
+                                                  nativeKey === 19 ||
+                                                  nativeKey === 21) {
                                                  roleList.moveRole(-1)
                                                  event.accepted = true
-                                             } else if (event.key === Qt.Key_Down ||
-                                                        event.key === Qt.Key_Right) {
+                                              } else if (event.key === Qt.Key_Down ||
+                                                         event.key === Qt.Key_Right ||
+                                                         nativeKey === 20 ||
+                                                         nativeKey === 22) {
                                                  roleList.moveRole(1)
                                                  event.accepted = true
                                              }
@@ -381,6 +406,27 @@ FocusScope {
                                                 ? roleBox.delegateModel
                                                 : null
                                              currentIndex: 0
+                                             highlightFollowsCurrentItem: true
+                                             highlightMoveDuration: 0
+
+                                             highlight: Rectangle {
+                                                 width: roleList.width
+                                                 height: 34
+                                                 radius: 7
+                                                 color: Theme.accentMuted
+                                                 border.width: 2
+                                                 border.color: Theme.accent
+                                                 z: -1
+
+                                                 Rectangle {
+                                                     anchors.left: parent.left
+                                                     anchors.top: parent.top
+                                                     anchors.bottom: parent.bottom
+                                                     width: 3
+                                                     radius: 2
+                                                     color: Theme.accent
+                                                 }
+                                             }
 
                                              function moveRole(delta) {
                                                  var next = Math.max(
@@ -396,15 +442,23 @@ FocusScope {
                                                      next,
                                                      ListView.Contain
                                                  )
-                                             }
+                                                  roleList.forceActiveFocus()
+                                              }
 
-                                             Keys.onPressed: function(event) {
-                                                 if (event.key === Qt.Key_Up ||
-                                                     event.key === Qt.Key_Left) {
+                                              Keys.onPressed: function(event) {
+                                                  var nativeKey = event.nativeVirtualKey !== undefined
+                                                      ? event.nativeVirtualKey
+                                                      : event.nativeScanCode
+                                                  if (event.key === Qt.Key_Up ||
+                                                      event.key === Qt.Key_Left ||
+                                                      nativeKey === 19 ||
+                                                      nativeKey === 21) {
                                                      roleList.moveRole(-1)
                                                      event.accepted = true
-                                                 } else if (event.key === Qt.Key_Down ||
-                                                            event.key === Qt.Key_Right) {
+                                                  } else if (event.key === Qt.Key_Down ||
+                                                             event.key === Qt.Key_Right ||
+                                                             nativeKey === 20 ||
+                                                             nativeKey === 22) {
                                                      roleList.moveRole(1)
                                                      event.accepted = true
                                                  } else if (event.key === Qt.Key_Return ||

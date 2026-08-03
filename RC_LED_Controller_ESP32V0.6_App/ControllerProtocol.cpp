@@ -55,6 +55,7 @@ bool FControllerProtocol::Begin(
     bHadBluetoothClient = false;
     bConfigurationChanged = false;
     bExhaustTestRequested = false;
+    bDiagnosticsRequested = false;
 
     LoadConfiguration();
 
@@ -152,6 +153,13 @@ bool FControllerProtocol::ConsumeExhaustTestRequested()
         bExhaustTestRequested;
 
     bExhaustTestRequested = false;
+    return bWasRequested;
+}
+
+bool FControllerProtocol::ConsumeDiagnosticsRequested()
+{
+    const bool bWasRequested = bDiagnosticsRequested;
+    bDiagnosticsRequested = false;
     return bWasRequested;
 }
 
@@ -295,6 +303,40 @@ void FControllerProtocol::SendTelemetry(
     );
 }
 
+void FControllerProtocol::SendDiagnostics(
+    bool aPcaConnected,
+    uint8_t aPcaAddress,
+    uint8_t aPcaMode1,
+    bool aAccelerometerConnected,
+    bool aAccelerometerCalibrated,
+    uint8_t aAccelerometerAddress,
+    uint8_t aAccelerometerWhoAmI,
+    bool aSteeringHasSignal,
+    bool aThrottleHasSignal
+)
+{
+    if (
+        BluetoothSerialPortPtr == nullptr ||
+        !BluetoothSerialPortPtr->hasClient()
+    )
+    {
+        return;
+    }
+
+    BluetoothSerialPortPtr->printf(
+        "DIAG,%u,%u,%u,%u,%u,%u,%u,%u,%u\n",
+        aPcaConnected ? 1U : 0U,
+        aPcaAddress,
+        aPcaMode1,
+        aAccelerometerConnected ? 1U : 0U,
+        aAccelerometerCalibrated ? 1U : 0U,
+        aAccelerometerAddress,
+        aAccelerometerWhoAmI,
+        aSteeringHasSignal ? 1U : 0U,
+        aThrottleHasSignal ? 1U : 0U
+    );
+}
+
 void FControllerProtocol::HandleCommand(
     char* aCommandPtr
 )
@@ -334,6 +376,15 @@ void FControllerProtocol::HandleCommand(
         )
         {
             SendConfiguration();
+            return;
+        }
+
+        if (
+            KeyPtr != nullptr &&
+            strcmp(KeyPtr, "DIAGNOSTICS") == 0
+        )
+        {
+            bDiagnosticsRequested = true;
             return;
         }
 

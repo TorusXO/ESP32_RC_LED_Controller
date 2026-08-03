@@ -276,7 +276,32 @@ FocusScope {
                 contentWidth: width
                 contentHeight: rightColumnContent.implicitHeight
                 clip: true
+                activeFocusOnTab: true
                 boundsBehavior: Flickable.StopAtBounds
+
+                Keys.onPressed: function(event) {
+                    if (event.key === Qt.Key_Up ||
+                        event.key === Qt.Key_Down ||
+                        event.key === Qt.Key_PageUp ||
+                        event.key === Qt.Key_PageDown) {
+                        var direction = event.key === Qt.Key_Up ||
+                            event.key === Qt.Key_PageUp ? -1 : 1
+                        var amount = event.key === Qt.Key_PageUp ||
+                            event.key === Qt.Key_PageDown ? 220 : 120
+                        var maximum = Math.max(
+                            0,
+                            rightColumn.contentHeight - rightColumn.height
+                        )
+                        rightColumn.contentY = Math.max(
+                            0,
+                            Math.min(
+                                maximum,
+                                rightColumn.contentY + direction * amount
+                            )
+                        )
+                        event.accepted = true
+                    }
+                }
 
                 ScrollBar.vertical: ScrollBar {
                     policy: ScrollBar.AsNeeded
@@ -403,6 +428,7 @@ FocusScope {
                                 subtitle: "ESC and motor cooling"
                                 KeyNavigation.up: headlightsApplyButton
                                 KeyNavigation.left: exhaustRow
+                                KeyNavigation.down: rightColumn
 
                                 onToggled: function(checked) {
                                     DeviceController.SetFansEnabled(checked)

@@ -66,6 +66,7 @@ public:
     bool IsConnected() const;
     bool IsCalibrated() const;
     uint8_t GetDeviceAddress() const;
+    uint8_t GetWhoAmI() const;
 
     void ResetFilter();
 
@@ -105,6 +106,7 @@ private:
 private:
     TwoWire* WirePtr = nullptr;
     uint8_t DeviceAddress = 0x68;
+    uint8_t DeviceWhoAmI = 0;
 
     FAccelerometerAxisConfiguration AxisConfiguration;
     FAccelerationState AccelerationState;
