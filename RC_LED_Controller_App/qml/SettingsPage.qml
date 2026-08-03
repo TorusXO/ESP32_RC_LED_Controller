@@ -375,6 +375,9 @@ FocusScope {
                             subtitle: "Acceleration delta required to activate the effect"
                             valueText: DeviceController.triggerThresholdG.toFixed(2) + " g"
                             value: DeviceController.triggerThresholdG
+                            from: 0.01
+                            to: 0.50
+                            stepSize: 0.01
 
                             onValueMoved: function(value) {
                                 DeviceController.SetPendingTriggerThresholdG(value)

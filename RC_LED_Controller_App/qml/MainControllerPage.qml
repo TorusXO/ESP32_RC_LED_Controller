@@ -182,13 +182,14 @@ FocusScope {
             Card {
                 Layout.preferredWidth: 560
                 Layout.fillHeight: true
+                Layout.minimumHeight: 340
 
                 ColumnLayout {
                     anchors.fill: parent
                     anchors.leftMargin: 18
                     anchors.rightMargin: 18
                     anchors.topMargin: 16
-                    anchors.bottomMargin: 16
+                    anchors.bottomMargin: 22
                     spacing: 10
 
                     Column {
