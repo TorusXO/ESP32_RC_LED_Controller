@@ -13,6 +13,7 @@ FocusScope {
     activeFocusOnTab: true
 
     property bool pendingHeadlightsOpen: DeviceController.headlightsOpen
+    property bool pendingFansEnabled: DeviceController.fansEnabled
 
     function focusFirstControl() {
         passiveRow.forceActiveFocus()
@@ -39,7 +40,8 @@ FocusScope {
         } else if (event.key === Qt.Key_F2) {
             root.openSettings()
             event.accepted = true
-        } else if (coolingRow.activeFocus &&
+        } else if ((coolingControl.activeFocus ||
+                    coolingApplyButton.activeFocus) &&
                    (event.key === Qt.Key_Down ||
                     event.key === Qt.Key_PageDown)) {
             root.scrollRightColumn(1)
@@ -273,8 +275,8 @@ FocusScope {
                         id: exhaustRow
                         Layout.fillWidth: true
                         KeyNavigation.up: activeRow
-                        KeyNavigation.down: coolingRow
-                        KeyNavigation.right: coolingRow
+                        KeyNavigation.down: coolingControl
+                        KeyNavigation.right: coolingControl
                         switchEnabled: true
                         checked: DeviceController.exhaustEnabled
                         title: "Exhaust LEDs"
@@ -416,7 +418,7 @@ FocusScope {
                                     enabled: root.pendingHeadlightsOpen !==
                                         DeviceController.headlightsOpen
                                     KeyNavigation.up: headlightsControl
-                                    KeyNavigation.down: coolingRow
+                                    KeyNavigation.down: coolingControl
                                     KeyNavigation.left: headlightsControl
                                     onClicked: {
                                         DeviceController.SetHeadlightsOpen(
@@ -430,65 +432,91 @@ FocusScope {
 
                     Card {
                         Layout.fillWidth: true
-                        Layout.topMargin: 14
-                        Layout.preferredHeight: 178
+                        Layout.preferredHeight: 220
 
                         ColumnLayout {
                             anchors.fill: parent
-                            anchors.leftMargin: 20
-                            anchors.rightMargin: 20
-                            anchors.topMargin: 18
-                            anchors.bottomMargin: 18
+                            anchors.leftMargin: 18
+                            anchors.rightMargin: 18
+                            anchors.topMargin: 16
+                            anchors.bottomMargin: 16
                             spacing: 12
 
-                            ControlRow {
-                                id: coolingRow
+                            Column {
                                 Layout.fillWidth: true
-                                Layout.leftMargin: 2
-                                Layout.rightMargin: 2
-                                switchRightMargin: 8
-                                checked: DeviceController.fansEnabled
-                                title: "Cooling fans"
-                                subtitle: "ESC and motor cooling"
-                                KeyNavigation.up: headlightsApplyButton
-                                KeyNavigation.left: exhaustRow
-                                KeyNavigation.down: null
+                                Layout.preferredHeight: 38
+                                spacing: 4
 
-                                onToggled: function(checked) {
-                                    DeviceController.SetFansEnabled(checked)
+                                Text {
+                                    text: "Cooling fans"
+                                    color: Theme.textPrimary
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 17
+                                    font.weight: Font.DemiBold
+                                }
+
+                                Text {
+                                    text: "ESC and motor cooling"
+                                    color: Theme.textSecondary
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 11
                                 }
                             }
 
-                            Rectangle {
+                            SegmentedControl {
+                                id: coolingControl
                                 Layout.fillWidth: true
-                                Layout.leftMargin: 2
-                                Layout.rightMargin: 2
-                                Layout.preferredHeight: 33
-                                color: Theme.surface
-                                radius: 10
+                                leftText: "Off"
+                                rightText: "On"
+                                rightSelected: root.pendingFansEnabled
+                                KeyNavigation.up: headlightsApplyButton
+                                KeyNavigation.left: exhaustRow
+                                KeyNavigation.right: coolingApplyButton
+                                KeyNavigation.down: coolingApplyButton
 
-                                RowLayout {
-                                    anchors.fill: parent
-                                    anchors.leftMargin: 12
-                                    anchors.rightMargin: 12
+                                onSelectionChanged: function(rightSelected) {
+                                    root.pendingFansEnabled = rightSelected
+                                }
+                            }
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: 34
+
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 2
 
                                     Text {
-                                        text: "Manual mode"
-                                        color: Theme.textSecondary
+                                        text: "Current state"
+                                        color: Theme.textPrimary
                                         font.family: Theme.fontFamily
                                         font.pixelSize: 11
                                     }
 
-                                    Item { Layout.fillWidth: true }
-
                                     Text {
                                         text: DeviceController.fansEnabled
-                                            ? DeviceController.fanSpeedPercent + "%"
+                                            ? "On  •  " + DeviceController.fanSpeedPercent + "%"
                                             : "Off"
                                         color: Theme.textPrimary
                                         font.family: Theme.fontFamily
-                                        font.pixelSize: 11
+                                        font.pixelSize: 10
                                         font.weight: Font.Medium
+                                    }
+                                }
+
+                                ActionButton {
+                                    id: coolingApplyButton
+                                    text: "Apply"
+                                    enabled: root.pendingFansEnabled !==
+                                        DeviceController.fansEnabled
+                                    KeyNavigation.up: coolingControl
+                                    KeyNavigation.down: null
+                                    KeyNavigation.left: coolingControl
+                                    onClicked: {
+                                        DeviceController.SetFansEnabled(
+                                            root.pendingFansEnabled
+                                        )
                                     }
                                 }
                             }
