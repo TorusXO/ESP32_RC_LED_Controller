@@ -273,7 +273,7 @@ FocusScope {
                 id: rightColumn
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                contentWidth: width
+                contentWidth: width - 18
                 contentHeight: rightColumnContent.implicitHeight
                 clip: true
                 activeFocusOnTab: true
@@ -303,18 +303,11 @@ FocusScope {
                     }
                 }
 
-                ScrollBar.vertical: ScrollBar {
-                    policy: ScrollBar.AsNeeded
-                    contentItem: Rectangle {
-                        implicitWidth: 4
-                        radius: 2
-                        color: Theme.track
-                    }
-                }
+                ScrollBar.vertical: InsetVerticalScrollBar {}
 
                 ColumnLayout {
                     id: rightColumnContent
-                    width: rightColumn.width
+                    width: rightColumn.contentWidth
                     spacing: 16
 
                     Card {
