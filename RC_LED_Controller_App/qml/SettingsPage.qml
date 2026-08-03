@@ -12,15 +12,6 @@ FocusScope {
     activeFocusOnTab: true
 
     property int activeCategory: 0
-    readonly property var categoryLabels: [
-        "Exhaust accelerometer",
-        "Output levels",
-        "Channel setup",
-        "Servo calibration",
-        "Gyro settings",
-        "Live values",
-        "Diagnostics"
-    ]
     readonly property var settingsRoles: [
         "Unused",
         "Exhaust light 1",
@@ -231,9 +222,9 @@ FocusScope {
                 spacing: 14
 
                 Row {
-                    Layout.preferredWidth: 230
+                    Layout.preferredWidth: 76
                     Layout.alignment: Qt.AlignVCenter
-                    spacing: 12
+                    spacing: 8
                     clip: true
 
                     ActionButton {
@@ -245,6 +236,15 @@ FocusScope {
                         onClicked: root.goBack()
                     }
 
+                    Text {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: "LT"
+                        color: Theme.textSecondary
+                        font.family: Theme.fontFamily
+                        font.pixelSize: 11
+                        font.weight: Font.Medium
+                    }
+
                     Column {
                         width: parent.width - 54
                         anchors.verticalCenter: parent.verticalCenter
@@ -253,12 +253,13 @@ FocusScope {
 
                         Text {
                             width: parent.width
-                            text: "Settings  /  " + root.categoryLabels[root.activeCategory]
+                            text: "Settings"
                             color: Theme.textPrimary
                             font.family: Theme.fontFamily
                             font.pixelSize: 20
                             font.weight: Font.DemiBold
                             elide: Text.ElideRight
+                            visible: false
                         }
 
                         Text {
@@ -266,6 +267,7 @@ FocusScope {
                             color: Theme.textSecondary
                             font.family: Theme.fontFamily
                             font.pixelSize: 11
+                            visible: false
                         }
                     }
                 }
@@ -357,6 +359,15 @@ FocusScope {
                     }
 
                     ScrollBar.horizontal: InsetHorizontalScrollBar {}
+                }
+
+                Text {
+                    Layout.alignment: Qt.AlignVCenter
+                    text: "RT >"
+                    color: Theme.textSecondary
+                    font.family: Theme.fontFamily
+                    font.pixelSize: 11
+                    font.weight: Font.Medium
                 }
             }
         }
