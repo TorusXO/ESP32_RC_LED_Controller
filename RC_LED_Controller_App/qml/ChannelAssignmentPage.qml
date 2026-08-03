@@ -528,16 +528,22 @@ FocusScope {
                     ? root.saveFeedback
                     : DeviceController.settingsDirty
                         ? "Unsaved changes — press Y to save"
-                        : DeviceController.settingsUploadPending
-                            ? "Saved locally; waiting to upload"
-                            : "Assignments are stored on the ESP32"
+                        : DeviceController.settingsSyncStatus !== ""
+                            ? DeviceController.settingsSyncStatus
+                            : DeviceController.settingsUploadPending
+                                ? "Saved locally; waiting to upload"
+                                : "Assignments are stored on the ESP32"
                 color: root.saveFeedback !== ""
                     ? (root.saveFeedback === "Settings saved locally and uploaded to ESP32"
                         ? Theme.green
                         : Theme.warning)
                     : DeviceController.settingsDirty
                         ? Theme.warning
-                        : Theme.textSecondary
+                        : DeviceController.settingsSyncStatus.indexOf("uploaded") >= 0
+                            ? Theme.green
+                            : DeviceController.settingsSyncStatus !== ""
+                                ? Theme.warning
+                                : Theme.textSecondary
                 font.family: Theme.fontFamily
                 font.pixelSize: 10
             }

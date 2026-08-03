@@ -145,6 +145,12 @@ class FDeviceController final : public QObject
         NOTIFY ConfigurationChanged
     )
 
+    Q_PROPERTY(
+        QString settingsSyncStatus
+        READ GetSettingsSyncStatus
+        NOTIFY ConfigurationChanged
+    )
+
 
     Q_PROPERTY(
         int steeringPulseUs
@@ -286,6 +292,7 @@ public:
     bool IsServoZeroed() const;
     bool AreSettingsDirty() const;
     bool IsSettingsUploadPending() const;
+    const QString& GetSettingsSyncStatus() const;
 
     Q_INVOKABLE int GetChannelRole(int aChannel) const;
     Q_INVOKABLE void SetChannelRole(int aChannel, int aRole);
@@ -398,6 +405,14 @@ private:
         const QList<QByteArray>& aFieldsRef
     );
 
+    void ParseAcknowledgement(
+        const QList<QByteArray>& aFieldsRef
+    );
+
+    void ParseError(
+        const QList<QByteArray>& aFieldsRef
+    );
+
     void ParseTelemetry(
         const QList<QByteArray>& aFieldsRef
     );
@@ -409,6 +424,7 @@ private:
     void LoadLocalSettings();
     bool StoreLocalSettings() const;
     void SendSettingsToController();
+    void BeginSettingsUpload();
 
 
     void SetConnectionState(
@@ -424,6 +440,7 @@ private:
     QBluetoothDeviceDiscoveryAgent* DiscoveryAgentPtr = nullptr;
     QBluetoothSocket* BluetoothSocketPtr = nullptr;
     QTimer* ReconnectTimerPtr = nullptr;
+    QTimer* SettingsUploadTimeoutTimerPtr = nullptr;
 
     QByteArray ReceiveBuffer;
 
@@ -472,6 +489,8 @@ private:
     bool bSettingsDirty = false;
     bool bLocalSettingsAvailable = false;
     bool bSettingsUploadPending = false;
+    bool bSettingsUploadInProgress = false;
+    QString SettingsSyncStatus;
 
 
     int SteeringPulseUs = 0;

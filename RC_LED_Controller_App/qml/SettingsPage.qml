@@ -1613,8 +1613,8 @@ FocusScope {
                                 ? root.saveFeedback
                                 : DeviceController.settingsDirty
                                     ? "Unsaved changes — press Y to save"
-                                    : DeviceController.settingsUploadPending
-                                        ? "Saved locally; waiting to upload"
+                                    : DeviceController.settingsSyncStatus !== ""
+                                        ? DeviceController.settingsSyncStatus
                                         : DeviceController.connected
                                             ? DeviceController.deviceStatusSummary
                                             : DeviceController.connectionStatus
@@ -1624,7 +1624,11 @@ FocusScope {
                                     : Theme.warning)
                                 : DeviceController.settingsDirty
                                     ? Theme.warning
-                                    : Theme.textSecondary
+                                    : DeviceController.settingsSyncStatus.indexOf("uploaded") >= 0
+                                        ? Theme.green
+                                        : DeviceController.settingsSyncStatus !== ""
+                                            ? Theme.warning
+                                            : Theme.textSecondary
                 font.family: Theme.fontFamily
                 font.pixelSize: 10
                 elide: Text.ElideRight

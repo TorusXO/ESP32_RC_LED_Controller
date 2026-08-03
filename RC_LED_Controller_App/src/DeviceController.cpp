@@ -44,15 +44,43 @@ FDeviceController::FDeviceController(
     , ReconnectTimerPtr(
         new QTimer(this)
     )
+    , SettingsUploadTimeoutTimerPtr(
+        new QTimer(this)
+    )
 {
     ReconnectTimerPtr->setSingleShot(true);
     ReconnectTimerPtr->setInterval(2000);
+
+    SettingsUploadTimeoutTimerPtr->setSingleShot(true);
+    SettingsUploadTimeoutTimerPtr->setInterval(5000);
 
     connect(
         ReconnectTimerPtr,
         &QTimer::timeout,
         this,
         &FDeviceController::StartScan
+    );
+
+    connect(
+        SettingsUploadTimeoutTimerPtr,
+        &QTimer::timeout,
+        this,
+        [this]()
+        {
+            if (!bSettingsUploadInProgress)
+            {
+                return;
+            }
+
+            bSettingsUploadInProgress = false;
+            bSettingsUploadPending = true;
+            SettingsSyncStatus =
+                QStringLiteral(
+                    "Upload timed out; settings remain saved locally"
+                );
+            emit ConfigurationChanged();
+            emit SettingsSaveCompleted(false, true);
+        }
     );
 
     connect(
@@ -253,6 +281,11 @@ bool FDeviceController::IsSettingsUploadPending() const
     return bSettingsUploadPending;
 }
 
+const QString& FDeviceController::GetSettingsSyncStatus() const
+{
+    return SettingsSyncStatus;
+}
+
 int FDeviceController::GetSteeringPulseUs() const
 {
     return SteeringPulseUs;
@@ -420,9 +453,14 @@ QString FDeviceController::GetDeviceStatusSummary() const
                 .arg(GetSteeringSignalStatus())
                 .arg(GetThrottleSignalStatus());
 
-    return bSettingsDirty
-        ? QStringLiteral("Unsaved changes  •  ") + Status
-        : Status;
+    if (bSettingsDirty)
+    {
+        return QStringLiteral("Unsaved changes  •  ") + Status;
+    }
+
+    return SettingsSyncStatus.isEmpty()
+        ? Status
+        : SettingsSyncStatus + QStringLiteral("  •  ") + Status;
 }
 
 void FDeviceController::StartScan()
@@ -906,6 +944,8 @@ void FDeviceController::LoadLocalSettings()
 
     bLocalSettingsAvailable = true;
     bSettingsUploadPending = true;
+    SettingsSyncStatus =
+        QStringLiteral("Saved locally; waiting to upload");
 }
 
 bool FDeviceController::StoreLocalSettings() const
@@ -1129,12 +1169,18 @@ void FDeviceController::SaveSettings()
     const bool bStoredLocally = StoreLocalSettings();
     if (!bStoredLocally)
     {
+        SettingsSyncStatus =
+            QStringLiteral("Unable to store settings locally");
+        emit ConfigurationChanged();
         emit SettingsSaveCompleted(false, false);
         return;
     }
 
     bLocalSettingsAvailable = true;
     bSettingsDirty = false;
+    bSettingsUploadPending = true;
+    SettingsSyncStatus =
+        QStringLiteral("Saved locally; waiting to upload");
 
     if (
         !bConnected ||
@@ -1142,16 +1188,34 @@ void FDeviceController::SaveSettings()
         QBluetoothSocket::SocketState::ConnectedState
     )
     {
-        bSettingsUploadPending = true;
         emit ConfigurationChanged();
         emit SettingsSaveCompleted(false, true);
         return;
     }
 
-    SendSettingsToController();
-    bSettingsUploadPending = false;
+    BeginSettingsUpload();
+}
+
+void FDeviceController::BeginSettingsUpload()
+{
+    if (
+        !bConnected ||
+        bSettingsDirty ||
+        BluetoothSocketPtr->state() !=
+        QBluetoothSocket::SocketState::ConnectedState
+    )
+    {
+        return;
+    }
+
+    bSettingsUploadPending = true;
+    bSettingsUploadInProgress = true;
+    SettingsSyncStatus =
+        QStringLiteral("Uploading settings to ESP32...");
     emit ConfigurationChanged();
-    emit SettingsSaveCompleted(true, true);
+
+    SendSettingsToController();
+    SettingsUploadTimeoutTimerPtr->start();
 }
 
 void FDeviceController::ResetDefaults()
@@ -1262,10 +1326,7 @@ void FDeviceController::HandleSocketConnected()
 
     if (bSettingsUploadPending && !bSettingsDirty)
     {
-        SendSettingsToController();
-        bSettingsUploadPending = false;
-        emit ConfigurationChanged();
-        emit SettingsSaveCompleted(true, true);
+        BeginSettingsUpload();
     }
     else if (!bLocalSettingsAvailable && !bSettingsDirty)
     {
@@ -1428,6 +1489,14 @@ void FDeviceController::ParseLine(
     {
         ParseConfiguration(Fields);
     }
+    else if (Fields[0] == "ACK")
+    {
+        ParseAcknowledgement(Fields);
+    }
+    else if (Fields[0] == "ERR")
+    {
+        ParseError(Fields);
+    }
     else if (Fields[0] == "TEL")
     {
         ParseTelemetry(Fields);
@@ -1550,6 +1619,53 @@ void FDeviceController::ParseConfiguration(
     emit ConfigurationChanged();
 }
 
+void FDeviceController::ParseAcknowledgement(
+    const QList<QByteArray>& aFieldsRef
+)
+{
+    if (
+        aFieldsRef.size() < 3 ||
+        aFieldsRef[1] != "SAVE" ||
+        aFieldsRef[2] != "1" ||
+        !bSettingsUploadInProgress
+    )
+    {
+        return;
+    }
+
+    SettingsUploadTimeoutTimerPtr->stop();
+    bSettingsUploadInProgress = false;
+    bSettingsUploadPending = false;
+    SettingsSyncStatus = QStringLiteral("Settings uploaded to ESP32");
+    emit ConfigurationChanged();
+    emit SettingsSaveCompleted(true, true);
+}
+
+void FDeviceController::ParseError(
+    const QList<QByteArray>& aFieldsRef
+)
+{
+    if (!bSettingsUploadInProgress)
+    {
+        return;
+    }
+
+    SettingsUploadTimeoutTimerPtr->stop();
+    bSettingsUploadInProgress = false;
+    bSettingsUploadPending = true;
+
+    const QString ErrorCode =
+        aFieldsRef.size() > 1
+            ? QString::fromUtf8(aFieldsRef[1])
+            : QStringLiteral("unknown error");
+
+    SettingsSyncStatus =
+        QStringLiteral("Upload failed (%1); settings remain saved locally")
+            .arg(ErrorCode);
+    emit ConfigurationChanged();
+    emit SettingsSaveCompleted(false, true);
+}
+
 void FDeviceController::ParseTelemetry(
     const QList<QByteArray>& aFieldsRef
 )
@@ -1656,6 +1772,17 @@ void FDeviceController::SetConnectionState(
 
     if (!aConnected)
     {
+        if (bSettingsUploadInProgress)
+        {
+            SettingsUploadTimeoutTimerPtr->stop();
+            bSettingsUploadInProgress = false;
+            bSettingsUploadPending = true;
+            SettingsSyncStatus =
+                QStringLiteral(
+                    "Upload interrupted; settings remain saved locally"
+                );
+        }
+
         bDiagnosticsPending = false;
         bPcaConnected = false;
         bAccelerometerConnected = false;
@@ -1665,11 +1792,13 @@ void FDeviceController::SetConnectionState(
 
     emit ConnectionChanged();
     emit DiagnosticsChanged();
+    emit ConfigurationChanged();
 }
 
 void FDeviceController::MarkSettingsDirty()
 {
     bSettingsDirty = true;
+    SettingsSyncStatus = QStringLiteral("Unsaved changes");
     emit ConfigurationChanged();
 }
 
