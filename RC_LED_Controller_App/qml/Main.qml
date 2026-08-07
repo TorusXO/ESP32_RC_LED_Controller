@@ -59,6 +59,9 @@ ApplicationWindow {
     Keys.onPressed: function(event) {
         if (root.routeDirectionalKey(event)) {
             event.accepted = true
+        } else if (event.key === Qt.Key_A && root.currentPage > 0) {
+            root.currentPage = root.currentPage === 2 ? 1 : 0
+            event.accepted = true
         }
     }
 

@@ -87,6 +87,24 @@ class FDeviceController final : public QObject
     )
 
     Q_PROPERTY(
+        int accelerometerForwardAxis
+        READ GetAccelerometerForwardAxis
+        NOTIFY ConfigurationChanged
+    )
+
+    Q_PROPERTY(
+        bool accelerometerForwardInverted
+        READ IsAccelerometerForwardInverted
+        NOTIFY ConfigurationChanged
+    )
+
+    Q_PROPERTY(
+        double accelerometerToleranceG
+        READ GetAccelerometerToleranceG
+        NOTIFY ConfigurationChanged
+    )
+
+    Q_PROPERTY(
         int activeBrightnessPercent
         READ GetActiveBrightnessPercent
         NOTIFY ConfigurationChanged
@@ -118,6 +136,18 @@ class FDeviceController final : public QObject
     Q_PROPERTY(
         bool settingsDirty
         READ AreSettingsDirty
+        NOTIFY ConfigurationChanged
+    )
+
+    Q_PROPERTY(
+        bool settingsUploadPending
+        READ IsSettingsUploadPending
+        NOTIFY ConfigurationChanged
+    )
+
+    Q_PROPERTY(
+        QString settingsSyncStatus
+        READ GetSettingsSyncStatus
         NOTIFY ConfigurationChanged
     )
 
@@ -206,6 +236,24 @@ class FDeviceController final : public QObject
         NOTIFY TelemetryChanged
     )
 
+    Q_PROPERTY(bool steeringSignalPresent READ HasSteeringSignal NOTIFY TelemetryChanged)
+    Q_PROPERTY(bool throttleSignalPresent READ HasThrottleSignal NOTIFY TelemetryChanged)
+
+    Q_PROPERTY(bool pcaConnected READ IsPcaConnected NOTIFY DiagnosticsChanged)
+    Q_PROPERTY(int pcaAddress READ GetPcaAddress NOTIFY DiagnosticsChanged)
+    Q_PROPERTY(int pcaMode1 READ GetPcaMode1 NOTIFY DiagnosticsChanged)
+    Q_PROPERTY(bool accelerometerConnected READ IsAccelerometerConnected NOTIFY DiagnosticsChanged)
+    Q_PROPERTY(bool accelerometerCalibrated READ IsAccelerometerCalibrated NOTIFY DiagnosticsChanged)
+    Q_PROPERTY(int accelerometerAddress READ GetAccelerometerAddress NOTIFY DiagnosticsChanged)
+    Q_PROPERTY(int accelerometerWhoAmI READ GetAccelerometerWhoAmI NOTIFY DiagnosticsChanged)
+    Q_PROPERTY(bool diagnosticsPending READ AreDiagnosticsPending NOTIFY DiagnosticsChanged)
+    Q_PROPERTY(QString diagnosticsSummary READ GetDiagnosticsSummary NOTIFY DiagnosticsChanged)
+    Q_PROPERTY(QString pcaStatusText READ GetPcaStatusText NOTIFY DiagnosticsChanged)
+    Q_PROPERTY(QString accelerometerStatusText READ GetAccelerometerStatusText NOTIFY DiagnosticsChanged)
+    Q_PROPERTY(QString steeringSignalStatus READ GetSteeringSignalStatus NOTIFY TelemetryChanged)
+    Q_PROPERTY(QString throttleSignalStatus READ GetThrottleSignalStatus NOTIFY TelemetryChanged)
+    Q_PROPERTY(QString deviceStatusSummary READ GetDeviceStatusSummary NOTIFY DiagnosticsChanged)
+
 public:
     explicit FDeviceController(
         QObject* aParentPtr = nullptr
@@ -226,6 +274,9 @@ public:
     bool AreFansEnabled() const;
     bool IsAccelerometerEnabled() const;
     double GetTriggerThresholdG() const;
+    int GetAccelerometerForwardAxis() const;
+    bool IsAccelerometerForwardInverted() const;
+    double GetAccelerometerToleranceG() const;
     int GetActiveBrightnessPercent() const;
     int GetDimBrightnessPercent() const;
     int GetFanSpeedPercent() const;
@@ -240,6 +291,8 @@ public:
     int GetServoOpenPulseUs() const;
     bool IsServoZeroed() const;
     bool AreSettingsDirty() const;
+    bool IsSettingsUploadPending() const;
+    const QString& GetSettingsSyncStatus() const;
 
     Q_INVOKABLE int GetChannelRole(int aChannel) const;
     Q_INVOKABLE void SetChannelRole(int aChannel, int aRole);
@@ -258,6 +311,23 @@ public:
     const QString& GetTurnDirection() const;
     bool IsBrakeActive() const;
     bool IsExhaustPulseActive() const;
+    bool HasSteeringSignal() const;
+    bool HasThrottleSignal() const;
+
+    bool IsPcaConnected() const;
+    int GetPcaAddress() const;
+    int GetPcaMode1() const;
+    bool IsAccelerometerConnected() const;
+    bool IsAccelerometerCalibrated() const;
+    int GetAccelerometerAddress() const;
+    int GetAccelerometerWhoAmI() const;
+    bool AreDiagnosticsPending() const;
+    const QString& GetDiagnosticsSummary() const;
+    QString GetPcaStatusText() const;
+    QString GetAccelerometerStatusText() const;
+    QString GetSteeringSignalStatus() const;
+    QString GetThrottleSignalStatus() const;
+    QString GetDeviceStatusSummary() const;
 
 public slots:
     void StartScan();
@@ -271,6 +341,9 @@ public slots:
 
     void SetPendingAccelerometerEnabled(bool aEnabled);
     void SetPendingTriggerThresholdG(double aThresholdG);
+    void SetPendingAccelerometerForwardAxis(int aAxis);
+    void SetPendingAccelerometerForwardInverted(bool aInverted);
+    void SetPendingAccelerometerToleranceG(double aToleranceG);
     void SetPendingActiveBrightnessPercent(int aBrightnessPercent);
     void SetPendingDimBrightnessPercent(int aBrightnessPercent);
     void SetPendingFanSpeedPercent(int aSpeedPercent);
@@ -288,12 +361,15 @@ public slots:
     void SaveSettings();
     void ResetDefaults();
     void TestExhaust();
+    void RunDiagnostics();
 
 signals:
     void ConnectionChanged();
     void DeviceInformationChanged();
     void ConfigurationChanged();
+    void SettingsSaveCompleted(bool aUploaded, bool aStoredLocally);
     void TelemetryChanged();
+    void DiagnosticsChanged();
 
 private slots:
     void HandleDeviceDiscovered(
@@ -329,9 +405,26 @@ private:
         const QList<QByteArray>& aFieldsRef
     );
 
+    void ParseAcknowledgement(
+        const QList<QByteArray>& aFieldsRef
+    );
+
+    void ParseError(
+        const QList<QByteArray>& aFieldsRef
+    );
+
     void ParseTelemetry(
         const QList<QByteArray>& aFieldsRef
     );
+
+    void ParseDiagnostics(
+        const QList<QByteArray>& aFieldsRef
+    );
+
+    void LoadLocalSettings();
+    bool StoreLocalSettings() const;
+    void SendSettingsToController();
+    void BeginSettingsUpload();
 
 
     void SetConnectionState(
@@ -347,6 +440,7 @@ private:
     QBluetoothDeviceDiscoveryAgent* DiscoveryAgentPtr = nullptr;
     QBluetoothSocket* BluetoothSocketPtr = nullptr;
     QTimer* ReconnectTimerPtr = nullptr;
+    QTimer* SettingsUploadTimeoutTimerPtr = nullptr;
 
     QByteArray ReceiveBuffer;
 
@@ -372,6 +466,9 @@ private:
     bool bAccelerometerEnabled = true;
 
     double TriggerThresholdG = 0.06;
+    int AccelerometerForwardAxis = 0;
+    bool bAccelerometerForwardInverted = false;
+    double AccelerometerToleranceG = 0.02;
     int ActiveBrightnessPercent = 100;
     int DimBrightnessPercent = 25;
     int FanSpeedPercent = 70;
@@ -390,6 +487,10 @@ private:
         0, 0, 0, 0, 7, 4, 5, 6
     };
     bool bSettingsDirty = false;
+    bool bLocalSettingsAvailable = false;
+    bool bSettingsUploadPending = false;
+    bool bSettingsUploadInProgress = false;
+    QString SettingsSyncStatus;
 
 
     int SteeringPulseUs = 0;
@@ -411,4 +512,16 @@ private:
 
     bool bBrakeActive = false;
     bool bExhaustPulseActive = false;
+    bool bSteeringSignalPresent = false;
+    bool bThrottleSignalPresent = false;
+
+    bool bPcaConnected = false;
+    int PcaAddress = 0x40;
+    int PcaMode1 = 0;
+    bool bAccelerometerConnected = false;
+    bool bAccelerometerCalibrated = false;
+    int AccelerometerAddress = 0x68;
+    int AccelerometerWhoAmI = 0;
+    bool bDiagnosticsPending = false;
+    QString DiagnosticsSummary = QStringLiteral("Run diagnostics to check the ESP32 hardware");
 };

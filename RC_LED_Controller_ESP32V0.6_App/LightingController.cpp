@@ -74,6 +74,7 @@ FLightingController::FLightingController()
 
 bool FLightingController::Begin()
 {
+    bConnected = false;
     Wire.begin(
         I2C_SDA_PIN,
         I2C_SCL_PIN
@@ -87,6 +88,8 @@ bool FLightingController::Begin()
     {
         return false;
     }
+
+    bConnected = true;
 
     PwmController.setOutputMode(
         false
@@ -155,6 +158,33 @@ bool FLightingController::Begin()
         EXHAUST_TRIGGER_COOLDOWN_MS;
 
     return true;
+}
+
+bool FLightingController::IsConnected() const
+{
+    return bConnected;
+}
+
+uint8_t FLightingController::GetDeviceAddress() const
+{
+    return PCA9685_ADDRESS;
+}
+
+uint8_t FLightingController::ReadMode1Register() const
+{
+    if (!bConnected)
+    {
+        return 0;
+    }
+
+    Wire.beginTransmission(PCA9685_ADDRESS);
+    Wire.write(0x00);
+    if (Wire.endTransmission(false) != 0 || Wire.requestFrom(PCA9685_ADDRESS, static_cast<uint8_t>(1)) != 1)
+    {
+        return 0;
+    }
+
+    return Wire.read();
 }
 
 void FLightingController::ApplyConfiguration(

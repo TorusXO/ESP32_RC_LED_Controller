@@ -55,6 +55,7 @@ bool FControllerProtocol::Begin(
     bHadBluetoothClient = false;
     bConfigurationChanged = false;
     bExhaustTestRequested = false;
+    bDiagnosticsRequested = false;
 
     LoadConfiguration();
 
@@ -155,6 +156,13 @@ bool FControllerProtocol::ConsumeExhaustTestRequested()
     return bWasRequested;
 }
 
+bool FControllerProtocol::ConsumeDiagnosticsRequested()
+{
+    const bool bWasRequested = bDiagnosticsRequested;
+    bDiagnosticsRequested = false;
+    return bWasRequested;
+}
+
 void FControllerProtocol::SendHello()
 {
     if (
@@ -186,7 +194,8 @@ void FControllerProtocol::SendConfiguration()
 
     BluetoothSerialPortPtr->printf(
         "CFG,%u,%u,%u,%u,%u,%u,%.3f,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,"
-        "%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u\n",
+        "%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,"
+        "%u,%u,%.3f\n",
         ConfigurationPtr->bPassiveLightsEnabled
             ? 1U
             : 0U,
@@ -233,7 +242,12 @@ void FControllerProtocol::SendConfiguration()
         ConfigurationPtr->ChannelRoles[14],
         ConfigurationPtr->ChannelRoles[15],
         ConfigurationPtr->ServoClosedPulseUs,
-        ConfigurationPtr->ServoOpenPulseUs
+        ConfigurationPtr->ServoOpenPulseUs,
+        ConfigurationPtr->AccelerometerForwardAxis,
+        ConfigurationPtr->bAccelerometerForwardInverted
+            ? 1U
+            : 0U,
+        ConfigurationPtr->AccelerometerToleranceG
     );
 }
 
@@ -295,6 +309,40 @@ void FControllerProtocol::SendTelemetry(
     );
 }
 
+void FControllerProtocol::SendDiagnostics(
+    bool aPcaConnected,
+    uint8_t aPcaAddress,
+    uint8_t aPcaMode1,
+    bool aAccelerometerConnected,
+    bool aAccelerometerCalibrated,
+    uint8_t aAccelerometerAddress,
+    uint8_t aAccelerometerWhoAmI,
+    bool aSteeringHasSignal,
+    bool aThrottleHasSignal
+)
+{
+    if (
+        BluetoothSerialPortPtr == nullptr ||
+        !BluetoothSerialPortPtr->hasClient()
+    )
+    {
+        return;
+    }
+
+    BluetoothSerialPortPtr->printf(
+        "DIAG,%u,%u,%u,%u,%u,%u,%u,%u,%u\n",
+        aPcaConnected ? 1U : 0U,
+        aPcaAddress,
+        aPcaMode1,
+        aAccelerometerConnected ? 1U : 0U,
+        aAccelerometerCalibrated ? 1U : 0U,
+        aAccelerometerAddress,
+        aAccelerometerWhoAmI,
+        aSteeringHasSignal ? 1U : 0U,
+        aThrottleHasSignal ? 1U : 0U
+    );
+}
+
 void FControllerProtocol::HandleCommand(
     char* aCommandPtr
 )
@@ -334,6 +382,15 @@ void FControllerProtocol::HandleCommand(
         )
         {
             SendConfiguration();
+            return;
+        }
+
+        if (
+            KeyPtr != nullptr &&
+            strcmp(KeyPtr, "DIAGNOSTICS") == 0
+        )
+        {
+            bDiagnosticsRequested = true;
             return;
         }
 
@@ -495,6 +552,24 @@ void FControllerProtocol::HandleSetCommand(
                 MINIMUM_TRIGGER_THRESHOLD_G,
                 MAXIMUM_TRIGGER_THRESHOLD_G
             );
+    }
+    else if (strcmp(aKeyPtr, "ACCELEROMETER_FORWARD_AXIS") == 0)
+    {
+        ConfigurationPtr->AccelerometerForwardAxis = static_cast<uint8_t>(
+            constrain(atoi(aValuePtr), 0, 2)
+        );
+    }
+    else if (strcmp(aKeyPtr, "ACCELEROMETER_FORWARD_INVERTED") == 0)
+    {
+        ConfigurationPtr->bAccelerometerForwardInverted = bBooleanValue;
+    }
+    else if (strcmp(aKeyPtr, "ACCELEROMETER_TOLERANCE_G") == 0)
+    {
+        ConfigurationPtr->AccelerometerToleranceG = constrain(
+            static_cast<float>(atof(aValuePtr)),
+            0.0f,
+            0.20f
+        );
     }
     else if (
         strcmp(
@@ -669,6 +744,24 @@ void FControllerProtocol::LoadConfiguration()
             ConfigurationPtr->ExhaustTriggerThresholdG
         );
 
+    ConfigurationPtr->AccelerometerForwardAxis =
+        ControllerPreferences.getUChar(
+            "fwdaxis",
+            ConfigurationPtr->AccelerometerForwardAxis
+        );
+
+    ConfigurationPtr->bAccelerometerForwardInverted =
+        ControllerPreferences.getBool(
+            "fwdinv",
+            ConfigurationPtr->bAccelerometerForwardInverted
+        );
+
+    ConfigurationPtr->AccelerometerToleranceG =
+        ControllerPreferences.getFloat(
+            "acctol",
+            ConfigurationPtr->AccelerometerToleranceG
+        );
+
     ConfigurationPtr->ActiveBrightnessPercent =
         ControllerPreferences.getUChar(
             "bright",
@@ -722,6 +815,17 @@ void FControllerProtocol::LoadConfiguration()
             MINIMUM_TRIGGER_THRESHOLD_G,
             MAXIMUM_TRIGGER_THRESHOLD_G
         );
+
+    ConfigurationPtr->AccelerometerForwardAxis = constrain(
+        ConfigurationPtr->AccelerometerForwardAxis,
+        static_cast<uint8_t>(0),
+        static_cast<uint8_t>(2)
+    );
+    ConfigurationPtr->AccelerometerToleranceG = constrain(
+        ConfigurationPtr->AccelerometerToleranceG,
+        0.0f,
+        0.20f
+    );
 
     ConfigurationPtr->ActiveBrightnessPercent =
         constrain(
@@ -794,6 +898,19 @@ bool FControllerProtocol::SaveConfiguration()
     ControllerPreferences.putFloat(
         "trig",
         ConfigurationPtr->ExhaustTriggerThresholdG
+    );
+
+    ControllerPreferences.putUChar(
+        "fwdaxis",
+        ConfigurationPtr->AccelerometerForwardAxis
+    );
+    ControllerPreferences.putBool(
+        "fwdinv",
+        ConfigurationPtr->bAccelerometerForwardInverted
+    );
+    ControllerPreferences.putFloat(
+        "acctol",
+        ConfigurationPtr->AccelerometerToleranceG
     );
 
     ControllerPreferences.putUChar(

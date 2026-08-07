@@ -29,6 +29,9 @@ public:
     FLightingController();
 
     bool Begin();
+    bool IsConnected() const;
+    uint8_t GetDeviceAddress() const;
+    uint8_t ReadMode1Register() const;
 
     void ApplyConfiguration(
         const FControllerConfiguration& aConfigurationRef
@@ -128,4 +131,5 @@ private:
     uint32_t LastExhaustTriggerTimeMs = 0;
     uint32_t ExhaustPulseStartTimeMs = 0;
     uint32_t ExhaustPulseDurationMs = 0;
+    bool bConnected = false;
 };

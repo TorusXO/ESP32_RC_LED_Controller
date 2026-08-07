@@ -12,24 +12,6 @@
 
 static constexpr uint8_t MPU6050_ADDRESS = 0x68;
 
-// Change these values to match how the MPU6050 is mounted in the car.
-//
-// Default orientation:
-// X axis -> front of the car
-// Y axis -> side of the car
-// Z axis -> top of the car
-static constexpr EAccelerometerAxis ACCELEROMETER_FORWARD_AXIS =
-EAccelerometerAxis::X;
-
-static constexpr EAccelerometerAxis ACCELEROMETER_SIDE_AXIS =
-EAccelerometerAxis::Y;
-
-static constexpr EAccelerometerAxis ACCELEROMETER_VERTICAL_AXIS =
-EAccelerometerAxis::Z;
-
-// Change this to true if forward movement produces a negative filtered value.
-static constexpr bool ACCELEROMETER_FORWARD_AXIS_INVERTED = false;
-
 // =============================================================================
 // ESP32 RC INPUT PINS
 // =============================================================================
@@ -170,6 +152,50 @@ void SendBluetoothTelemetry(
 
 const char* GetTurnDirectionText();
 
+bool ApplyAccelerometerConfiguration();
+
+bool ApplyAccelerometerConfiguration()
+{
+    const uint8_t ForwardAxisIndex =
+        ControllerConfiguration.AccelerometerForwardAxis <= 2
+            ? ControllerConfiguration.AccelerometerForwardAxis
+            : 0;
+
+    FAccelerometerAxisConfiguration AxisConfiguration;
+    AxisConfiguration.ForwardAxis =
+        static_cast<EAccelerometerAxis>(ForwardAxisIndex);
+    AxisConfiguration.bForwardAxisInverted =
+        ControllerConfiguration.bAccelerometerForwardInverted;
+
+    switch (AxisConfiguration.ForwardAxis)
+    {
+        case EAccelerometerAxis::X:
+            AxisConfiguration.SideAxis = EAccelerometerAxis::Y;
+            AxisConfiguration.VerticalAxis = EAccelerometerAxis::Z;
+            break;
+
+        case EAccelerometerAxis::Y:
+            AxisConfiguration.SideAxis = EAccelerometerAxis::X;
+            AxisConfiguration.VerticalAxis = EAccelerometerAxis::Z;
+            break;
+
+        case EAccelerometerAxis::Z:
+            AxisConfiguration.SideAxis = EAccelerometerAxis::X;
+            AxisConfiguration.VerticalAxis = EAccelerometerAxis::Y;
+            break;
+    }
+
+    const bool bAxisConfigurationValid =
+        AccelerometerController.SetAxisConfiguration(
+        AxisConfiguration
+        );
+    AccelerometerController.SetForwardToleranceG(
+        ControllerConfiguration.AccelerometerToleranceG
+    );
+
+    return bAxisConfigurationValid;
+}
+
 // =============================================================================
 // SETUP
 // =============================================================================
@@ -250,24 +276,8 @@ void setup()
         );
     }
 
-    FAccelerometerAxisConfiguration AxisConfiguration;
-
-    AxisConfiguration.ForwardAxis =
-        ACCELEROMETER_FORWARD_AXIS;
-
-    AxisConfiguration.bForwardAxisInverted =
-        ACCELEROMETER_FORWARD_AXIS_INVERTED;
-
-    AxisConfiguration.SideAxis =
-        ACCELEROMETER_SIDE_AXIS;
-
-    AxisConfiguration.VerticalAxis =
-        ACCELEROMETER_VERTICAL_AXIS;
-
     if (
-        !AccelerometerController.SetAxisConfiguration(
-            AxisConfiguration
-        )
+        !ApplyAccelerometerConfiguration()
         )
     {
         Serial.println(
@@ -368,6 +378,7 @@ void loop()
         ControllerProtocol.ConsumeConfigurationChanged()
     )
     {
+        ApplyAccelerometerConfiguration();
         LightingController.ApplyConfiguration(
             ControllerConfiguration
         );
@@ -413,6 +424,21 @@ void loop()
             RC_THROTTLE_DEADZONE_US,
             false
         );
+
+    if (ControllerProtocol.ConsumeDiagnosticsRequested())
+    {
+        ControllerProtocol.SendDiagnostics(
+            LightingController.IsConnected(),
+            LightingController.GetDeviceAddress(),
+            LightingController.ReadMode1Register(),
+            AccelerometerController.IsConnected(),
+            AccelerometerController.IsCalibrated(),
+            AccelerometerController.GetDeviceAddress(),
+            AccelerometerController.GetWhoAmI(),
+            SteeringSnapshot.bHasSignal,
+            ThrottleSnapshot.bHasSignal
+        );
+    }
 
     AccelerometerController.Update(
         CurrentTimeMs

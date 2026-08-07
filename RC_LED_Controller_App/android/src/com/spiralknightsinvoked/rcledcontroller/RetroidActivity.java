@@ -89,11 +89,17 @@ public class RetroidActivity extends QtActivity {
         if (keyCode == KeyEvent.KEYCODE_BACK) {
             return KeyEvent.KEYCODE_ESCAPE;
         }
+        if (keyCode == KeyEvent.KEYCODE_BUTTON_MODE ||
+            keyCode == KeyEvent.KEYCODE_BUTTON_SELECT ||
+            keyCode == KeyEvent.KEYCODE_BUTTON_START ||
+            keyCode == KeyEvent.KEYCODE_MENU) {
+            return KeyEvent.KEYCODE_F1;
+        }
         if (keyCode == KeyEvent.KEYCODE_BUTTON_A) {
             return KeyEvent.KEYCODE_ENTER;
         }
         if (keyCode == KeyEvent.KEYCODE_BUTTON_B) {
-            return KeyEvent.KEYCODE_B;
+            return KeyEvent.KEYCODE_A;
         }
         if (keyCode == KeyEvent.KEYCODE_BUTTON_X) {
             return KeyEvent.KEYCODE_X;

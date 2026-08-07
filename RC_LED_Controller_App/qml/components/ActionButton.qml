@@ -40,7 +40,7 @@ Button {
     background: Rectangle {
         radius: 11
         color: root.primary
-            ? Theme.accent
+            ? (root.down ? Theme.accent : Theme.accentMuted)
             : Theme.panel
 
         border.width: root.activeFocus ? 2 : 1
@@ -51,5 +51,20 @@ Button {
         opacity: root.enabled
             ? (root.down ? 0.78 : 1.0)
             : 0.4
+
+        Behavior on color {
+            ColorAnimation { duration: 120 }
+        }
+
+        Behavior on border.color {
+            ColorAnimation { duration: 100 }
+        }
+
+        Behavior on border.width {
+            NumberAnimation {
+                duration: 100
+                easing.type: Easing.OutCubic
+            }
+        }
     }
 }

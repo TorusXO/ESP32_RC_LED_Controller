@@ -15,6 +15,9 @@ struct FControllerConfiguration
     bool bAccelerometerExhaustEnabled = true;
 
     float ExhaustTriggerThresholdG = 0.06f;
+    uint8_t AccelerometerForwardAxis = 0;
+    bool bAccelerometerForwardInverted = false;
+    float AccelerometerToleranceG = 0.02f;
 
     uint8_t ActiveBrightnessPercent = 100;
     uint8_t DimBrightnessPercent = 25;
