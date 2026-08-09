@@ -24,7 +24,8 @@ FocusScope {
         "Left turning lights",
         "Right turning lights",
         "Headlight servo",
-        "Cooling fans"
+        "Cooling fans",
+        "White reverse lights"
     ]
 
     Timer {
@@ -539,11 +540,7 @@ FocusScope {
                         : Theme.warning)
                     : DeviceController.settingsDirty
                         ? Theme.warning
-                        : DeviceController.settingsSyncStatus.indexOf("uploaded") >= 0
-                            ? Theme.green
-                            : DeviceController.settingsSyncStatus !== ""
-                                ? Theme.warning
-                                : Theme.textSecondary
+                        : Theme.textSecondary
                 font.family: Theme.fontFamily
                 font.pixelSize: 10
             }

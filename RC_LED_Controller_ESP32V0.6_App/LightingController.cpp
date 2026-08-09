@@ -135,6 +135,12 @@ bool FLightingController::Begin()
     SetRoleBrightness(5, CurrentLeftTurnBrightness);
     SetRoleBrightness(6, CurrentRightTurnBrightness);
     SetRoleBrightness(
+        9,
+        bBrakeOrReverseActive
+            ? LED_FULL_BRIGHTNESS
+            : LED_OFF_BRIGHTNESS
+    );
+    SetRoleBrightness(
         8,
         Configuration.bFansEnabled
             ? ConvertPercentToBrightness(Configuration.FanSpeedPercent)
@@ -590,6 +596,12 @@ void FLightingController::ApplyLightingOutputs(
     SetRoleBrightness(5, CurrentLeftTurnBrightness);
     SetRoleBrightness(6, CurrentRightTurnBrightness);
     SetRoleBrightness(
+        9,
+        bBrakeOrReverseActive
+            ? LED_FULL_BRIGHTNESS
+            : LED_OFF_BRIGHTNESS
+    );
+    SetRoleBrightness(
         8,
         Configuration.bFansEnabled
             ? ConvertPercentToBrightness(Configuration.FanSpeedPercent)
@@ -609,6 +621,15 @@ void FLightingController::ApplyLightingOutputs(
             ? Configuration.ServoOpenPulseUs
             : Configuration.ServoClosedPulseUs
     );
+
+    if (bServoTestOverrideActive)
+    {
+        PwmController.setPWM(
+            ServoTestChannel,
+            0,
+            ServoTestPulse
+        );
+    }
 }
 
 void FLightingController::ApplyPassiveOutputs()
@@ -876,13 +897,55 @@ void FLightingController::SetRoleServoPosition(
     uint16_t aPulse
 )
 {
+    bool bExplicitChannelWritten = false;
+
+    if (Configuration.HeadlightServoChannel < 16)
+    {
+        PwmController.setPWM(
+            Configuration.HeadlightServoChannel,
+            0,
+            aPulse
+        );
+        bExplicitChannelWritten = true;
+    }
+
     for (uint8_t Channel = 0; Channel < 16; ++Channel)
     {
-        if (Configuration.ChannelRoles[Channel] == 7)
+        if (
+            Configuration.ChannelRoles[Channel] == 7 &&
+            (!bExplicitChannelWritten ||
+             Channel != Configuration.HeadlightServoChannel)
+        )
         {
             PwmController.setPWM(Channel, 0, aPulse);
         }
     }
+}
+
+void FLightingController::SetServoTestPosition(
+    uint8_t aChannel,
+    uint16_t aPulse
+)
+{
+    if (aChannel >= 16)
+    {
+        return;
+    }
+
+    ServoTestChannel = aChannel;
+    ServoTestPulse = aPulse;
+    bServoTestOverrideActive = true;
+
+    PwmController.setPWM(
+        ServoTestChannel,
+        0,
+        ServoTestPulse
+    );
+}
+
+void FLightingController::ClearServoTestPosition()
+{
+    bServoTestOverrideActive = false;
 }
 
 ETurnDirection

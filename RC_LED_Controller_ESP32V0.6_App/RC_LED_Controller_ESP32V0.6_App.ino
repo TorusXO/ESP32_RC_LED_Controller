@@ -393,6 +393,29 @@ void loop()
         );
     }
 
+    uint8_t ServoTestChannel = 0;
+    uint16_t ServoTestPulse = 0;
+
+    if (
+        ControllerProtocol.ConsumeServoTestRequested(
+            ServoTestChannel,
+            ServoTestPulse
+        )
+    )
+    {
+        LightingController.SetServoTestPosition(
+            ServoTestChannel,
+            ServoTestPulse
+        );
+    }
+
+    if (
+        ControllerProtocol.ConsumeServoTestClearRequested()
+    )
+    {
+        LightingController.ClearServoTestPosition();
+    }
+
     if (
         CurrentTimeMs -
         LastOutputUpdateTimeMs <

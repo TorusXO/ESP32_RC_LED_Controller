@@ -20,10 +20,17 @@ public:
 
     bool ConsumeConfigurationChanged();
     bool ConsumeExhaustTestRequested();
+    bool ConsumeServoTestRequested(
+        uint8_t& aChannel,
+        uint16_t& aPulse
+    );
+    bool ConsumeServoTestClearRequested();
     bool ConsumeDiagnosticsRequested();
 
     void SendHello();
     void SendConfiguration();
+    const char* GetBoardName() const;
+    void GetBoardId(char* aBuffer, size_t aBufferSize) const;
 
     void SendTelemetry(
         uint32_t aCurrentTimeMs,
@@ -90,5 +97,9 @@ private:
     bool bHadBluetoothClient = false;
     bool bConfigurationChanged = false;
     bool bExhaustTestRequested = false;
+    bool bServoTestRequested = false;
+    bool bServoTestClearRequested = false;
+    uint8_t ServoTestChannel = 0;
+    uint16_t ServoTestPulse = 0;
     bool bDiagnosticsRequested = false;
 };

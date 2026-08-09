@@ -1,6 +1,7 @@
 #include "ControllerProtocol.h"
 
 #include <BluetoothSerial.h>
+#include <Esp.h>
 #include <Preferences.h>
 
 #include <stdlib.h>
@@ -25,6 +26,8 @@ namespace
 
     static constexpr float MAXIMUM_TRIGGER_THRESHOLD_G =
         0.50f;
+
+    static constexpr size_t BOARD_NAME_SIZE = 32;
 
 
     uint8_t ParseChannel(const char* aValuePtr)
@@ -55,6 +58,10 @@ bool FControllerProtocol::Begin(
     bHadBluetoothClient = false;
     bConfigurationChanged = false;
     bExhaustTestRequested = false;
+    bServoTestRequested = false;
+    bServoTestClearRequested = false;
+    ServoTestChannel = 0;
+    ServoTestPulse = 0;
     bDiagnosticsRequested = false;
 
     LoadConfiguration();
@@ -156,6 +163,31 @@ bool FControllerProtocol::ConsumeExhaustTestRequested()
     return bWasRequested;
 }
 
+bool FControllerProtocol::ConsumeServoTestRequested(
+    uint8_t& aChannel,
+    uint16_t& aPulse
+)
+{
+    if (!bServoTestRequested)
+    {
+        return false;
+    }
+
+    aChannel = ServoTestChannel;
+    aPulse = ServoTestPulse;
+    bServoTestRequested = false;
+    return true;
+}
+
+bool FControllerProtocol::ConsumeServoTestClearRequested()
+{
+    const bool bWasRequested =
+        bServoTestClearRequested;
+
+    bServoTestClearRequested = false;
+    return bWasRequested;
+}
+
 bool FControllerProtocol::ConsumeDiagnosticsRequested()
 {
     const bool bWasRequested = bDiagnosticsRequested;
@@ -173,11 +205,45 @@ void FControllerProtocol::SendHello()
         return;
     }
 
+    char BoardId[17] = {};
+    GetBoardId(BoardId, sizeof(BoardId));
+
     BluetoothSerialPortPtr->printf(
-        "HELLO,%s,%s,%s\n",
+        "HELLO,%s,%s,%s,%s,%s\n",
         DEVICE_PROTOCOL_VERSION,
         DEVICE_NAME,
-        FIRMWARE_VERSION
+        FIRMWARE_VERSION,
+        GetBoardName(),
+        BoardId
+    );
+}
+
+const char* FControllerProtocol::GetBoardName() const
+{
+    return ConfigurationPtr == nullptr ||
+        ConfigurationPtr->BoardName[0] == '\0'
+        ? "Unassigned body"
+        : ConfigurationPtr->BoardName;
+}
+
+void FControllerProtocol::GetBoardId(
+    char* aBuffer,
+    size_t aBufferSize
+) const
+{
+    if (aBuffer == nullptr || aBufferSize == 0)
+    {
+        return;
+    }
+
+    const uint64_t ChipId = ESP.getEfuseMac();
+
+    snprintf(
+        aBuffer,
+        aBufferSize,
+        "%04X%08X",
+        static_cast<unsigned int>(ChipId >> 32),
+        static_cast<unsigned int>(ChipId & 0xFFFFFFFFULL)
     );
 }
 
@@ -454,6 +520,77 @@ void FControllerProtocol::HandleCommand(
             return;
         }
 
+        if (
+            KeyPtr != nullptr &&
+            strcmp(KeyPtr, "SERVO") == 0
+        )
+        {
+            const char* ChannelPtr =
+                strtok_r(
+                    nullptr,
+                    ",",
+                    &SaveStatePtr
+                );
+
+            const char* PulsePtr =
+                strtok_r(
+                    nullptr,
+                    ",",
+                    &SaveStatePtr
+                );
+
+            if (ChannelPtr == nullptr || PulsePtr == nullptr)
+            {
+                SendError("INVALID_SERVO_TEST");
+                return;
+            }
+
+            const int Channel = atoi(ChannelPtr);
+            const int Pulse = atoi(PulsePtr);
+
+            if (Channel < 0 || Channel > 15)
+            {
+                SendError("INVALID_SERVO_CHANNEL");
+                return;
+            }
+
+            if (Pulse < 0 || Pulse > 4095)
+            {
+                SendError("INVALID_SERVO_PULSE");
+                return;
+            }
+
+            ServoTestChannel =
+                static_cast<uint8_t>(Channel);
+            ServoTestPulse =
+                static_cast<uint16_t>(Pulse);
+            bServoTestClearRequested = false;
+            bServoTestRequested = true;
+
+            SendAcknowledgement(
+                "TEST_SERVO",
+                "1"
+            );
+
+            return;
+        }
+
+        if (
+            KeyPtr != nullptr &&
+            strcmp(KeyPtr, "SERVO_CLEAR") == 0
+        )
+        {
+            bServoTestRequested = false;
+            bServoTestClearRequested = true;
+
+            SendAcknowledgement(
+                "TEST_SERVO_CLEAR",
+                "1"
+            );
+
+            return;
+        }
+
         SendError("UNKNOWN_TEST");
         return;
     }
@@ -571,6 +708,38 @@ void FControllerProtocol::HandleSetCommand(
             0.20f
         );
     }
+    else if (strcmp(aKeyPtr, "BOARD_NAME") == 0)
+    {
+        char SanitizedBoardName[BOARD_NAME_SIZE] = {};
+        size_t DestinationIndex = 0;
+
+        for (
+            size_t SourceIndex = 0;
+            aValuePtr[SourceIndex] != '\0' &&
+            DestinationIndex + 1 < sizeof(SanitizedBoardName);
+            ++SourceIndex
+        )
+        {
+            const char Character = aValuePtr[SourceIndex];
+
+            if (Character == ',')
+            {
+                break;
+            }
+
+            SanitizedBoardName[DestinationIndex++] = Character;
+        }
+
+        SanitizedBoardName[DestinationIndex] = '\0';
+        strncpy(
+            ConfigurationPtr->BoardName,
+            SanitizedBoardName,
+            sizeof(ConfigurationPtr->BoardName) - 1
+        );
+        ConfigurationPtr->BoardName[
+            sizeof(ConfigurationPtr->BoardName) - 1
+        ] = '\0';
+    }
     else if (
         strcmp(
             aKeyPtr,
@@ -670,7 +839,7 @@ void FControllerProtocol::HandleSetCommand(
         }
 
         ConfigurationPtr->ChannelRoles[Channel] = static_cast<uint8_t>(
-            constrain(atoi(aValuePtr), 0, 8)
+            constrain(atoi(aValuePtr), 0, 9)
         );
     }
     else
@@ -737,6 +906,19 @@ void FControllerProtocol::LoadConfiguration()
             ConfigurationPtr->
                 bAccelerometerExhaustEnabled
         );
+
+    const String StoredBoardName = ControllerPreferences.getString(
+        "boardname",
+        ConfigurationPtr->BoardName
+    );
+    strncpy(
+        ConfigurationPtr->BoardName,
+        StoredBoardName.c_str(),
+        sizeof(ConfigurationPtr->BoardName) - 1
+    );
+    ConfigurationPtr->BoardName[
+        sizeof(ConfigurationPtr->BoardName) - 1
+    ] = '\0';
 
     ConfigurationPtr->ExhaustTriggerThresholdG =
         ControllerPreferences.getFloat(
@@ -893,6 +1075,11 @@ bool FControllerProtocol::SaveConfiguration()
         "accelen",
         ConfigurationPtr->
             bAccelerometerExhaustEnabled
+    );
+
+    ControllerPreferences.putString(
+        "boardname",
+        ConfigurationPtr->BoardName
     );
 
     ControllerPreferences.putFloat(

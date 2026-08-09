@@ -13,6 +13,7 @@ FocusScope {
 
     property int activeCategory: 0
     property string saveFeedback: ""
+    property string profileNameInput: ""
     readonly property var settingsRoles: [
         "Unused",
         "Exhaust light 1",
@@ -22,7 +23,8 @@ FocusScope {
         "Left turning lights",
         "Right turning lights",
         "Headlight servo",
-        "Cooling fans"
+        "Cooling fans",
+        "White reverse lights"
     ]
 
     signal goBack()
@@ -67,9 +69,11 @@ FocusScope {
             return gyroTab
         } else if (root.activeCategory === 5) {
             return liveTab
+        } else if (root.activeCategory === 6) {
+            return diagnosticsTab
         }
 
-        return diagnosticsTab
+        return profilesTab
     }
 
     function categoryMenuHasFocus() {
@@ -80,7 +84,8 @@ FocusScope {
             servoTab.activeFocus ||
             gyroTab.activeFocus ||
             liveTab.activeFocus ||
-            diagnosticsTab.activeFocus
+            diagnosticsTab.activeFocus ||
+            profilesTab.activeFocus
     }
 
     function handleBack() {
@@ -110,6 +115,8 @@ FocusScope {
             livePanel.forceActiveFocus()
         } else if (root.activeCategory === 6) {
             diagnosticsButton.forceActiveFocus()
+        } else if (root.activeCategory === 7) {
+            profileNameField.forceActiveFocus()
         } else {
             livePanel.forceActiveFocus()
         }
@@ -123,8 +130,8 @@ FocusScope {
     function cycleCategory(direction) {
         var category = root.activeCategory + direction
         if (category < 0) {
-            category = 6
-        } else if (category > 6) {
+            category = 7
+        } else if (category > 7) {
             category = 0
         }
         root.activateCategory(category)
@@ -202,6 +209,14 @@ FocusScope {
                 Math.min(
                     Math.max(0, diagnosticsFlickable.contentHeight - diagnosticsFlickable.height),
                     diagnosticsFlickable.contentY + amount
+                )
+            )
+        } else if (root.activeCategory === 7) {
+            profilesFlickable.contentY = Math.max(
+                0,
+                Math.min(
+                    Math.max(0, profilesFlickable.contentHeight - profilesFlickable.height),
+                    profilesFlickable.contentY + amount
                 )
             )
         }
@@ -378,8 +393,18 @@ FocusScope {
                             category: 6
                             label: "Diagnostics"
                             KeyNavigation.left: liveTab
-                            KeyNavigation.right: accelerometerTab
+                            KeyNavigation.right: profilesTab
                             KeyNavigation.down: diagnosticsButton
+                            onActivated: root.activateCategory(category)
+                        }
+
+                        SettingsTab {
+                            id: profilesTab
+                            category: 7
+                            label: "Vehicle profiles"
+                            KeyNavigation.left: diagnosticsTab
+                            KeyNavigation.right: accelerometerTab
+                            KeyNavigation.down: profileNameField
                             onActivated: root.activateCategory(category)
                         }
 
@@ -1601,6 +1626,247 @@ FocusScope {
                 }
             }
 
+            Card {
+                id: profilesPanel
+                highlighted: root.activeCategory === 7
+
+                Flickable {
+                    id: profilesFlickable
+                    anchors.fill: parent
+                    anchors.margins: 18
+                    contentWidth: width - 18
+                    contentHeight: profilesContent.implicitHeight
+                    clip: true
+                    boundsBehavior: Flickable.StopAtBounds
+
+                    Behavior on contentY {
+                        NumberAnimation {
+                            duration: 180
+                            easing.type: Easing.OutCubic
+                        }
+                    }
+
+                    ScrollBar.vertical: InsetVerticalScrollBar {}
+
+                    ColumnLayout {
+                        id: profilesContent
+                        width: profilesFlickable.contentWidth
+                        spacing: 14
+
+                        Column {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 38
+                            spacing: 4
+
+                            Text {
+                                text: "Vehicle profiles"
+                                color: Theme.textPrimary
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 17
+                                font.weight: Font.DemiBold
+                            }
+
+                            Text {
+                                text: "Keep a named setup for each body and match it to the connected ESP32"
+                                color: Theme.textSecondary
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 11
+                                wrapMode: Text.WordWrap
+                            }
+                        }
+
+                        Rectangle {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 94
+                            color: Theme.surface
+                            radius: 12
+
+                            ColumnLayout {
+                                anchors.fill: parent
+                                anchors.margins: 14
+                                spacing: 6
+
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: "Connected board: " + DeviceController.boardName
+                                    color: Theme.textPrimary
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 12
+                                    font.weight: Font.Medium
+                                    elide: Text.ElideRight
+                                }
+
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: "ESP32 ID: " + DeviceController.boardId
+                                    color: Theme.textSecondary
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 10
+                                    elide: Text.ElideRight
+                                }
+
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: DeviceController.matchingProfileName !== ""
+                                        ? "Matching preset: " + DeviceController.matchingProfileName
+                                        : "No preset is assigned to this ESP32 yet"
+                                    color: DeviceController.matchingProfileName !== ""
+                                        ? Theme.green
+                                        : Theme.textSecondary
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 10
+                                    elide: Text.ElideRight
+                                }
+                            }
+                        }
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 10
+
+                            TextField {
+                                id: boardNameField
+                                Layout.fillWidth: true
+                                placeholderText: "Body name, for example: Supra white"
+                                text: DeviceController.boardName
+                                selectByMouse: true
+                                KeyNavigation.up: profilesTab
+                                KeyNavigation.down: profileNameField
+                                onEditingFinished: DeviceController.SetBoardName(text)
+                            }
+
+                            ActionButton {
+                                id: setBoardNameButton
+                                text: "Set board name"
+                                KeyNavigation.up: profilesTab
+                                KeyNavigation.down: profileNameField
+                                onClicked: DeviceController.SetBoardName(boardNameField.text)
+                            }
+                        }
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 10
+
+                            TextField {
+                                id: profileNameField
+                                Layout.fillWidth: true
+                                placeholderText: "New preset name"
+                                text: root.profileNameInput
+                                selectByMouse: true
+                                KeyNavigation.up: boardNameField
+                                KeyNavigation.down: profileList
+                                onTextChanged: root.profileNameInput = text
+                            }
+
+                            ActionButton {
+                                id: saveProfileButton
+                                text: "Save preset"
+                                primary: true
+                                enabled: profileNameField.text.trim() !== ""
+                                KeyNavigation.up: boardNameField
+                                KeyNavigation.down: profileList
+                                onClicked: DeviceController.SaveProfile(profileNameField.text)
+                            }
+                        }
+
+                        ListView {
+                            id: profileList
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: Math.min(
+                                150,
+                                Math.max(44, contentHeight)
+                            )
+                            clip: true
+                            focus: false
+                            activeFocusOnTab: true
+                            model: DeviceController.profileNames
+                            currentIndex: DeviceController.profileNames.length > 0 ? 0 : -1
+                            KeyNavigation.up: profileNameField
+                            KeyNavigation.down: loadProfileButton
+
+                            delegate: Rectangle {
+                                required property string modelData
+                                required property int index
+
+                                width: profileList.width
+                                height: 36
+                                radius: 8
+                                color: profileList.currentIndex === index
+                                    ? Theme.accentMuted
+                                    : Theme.surface
+                                border.width: profileList.currentIndex === index ? 2 : 1
+                                border.color: profileList.currentIndex === index
+                                    ? Theme.accent
+                                    : Theme.border
+
+                                Text {
+                                    anchors.fill: parent
+                                    anchors.leftMargin: 12
+                                    text: parent.modelData
+                                    color: Theme.textPrimary
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 11
+                                    verticalAlignment: Text.AlignVCenter
+                                }
+
+                                TapHandler {
+                                    onTapped: {
+                                        profileList.currentIndex = parent.index
+                                        profileList.forceActiveFocus()
+                                    }
+                                }
+                            }
+                        }
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 10
+
+                            ActionButton {
+                                id: loadProfileButton
+                                text: "Load selected"
+                                enabled: profileList.currentIndex >= 0
+                                KeyNavigation.up: profileList
+                                KeyNavigation.down: loadMatchingProfileButton
+                                onClicked: DeviceController.LoadProfile(
+                                    DeviceController.profileNames[profileList.currentIndex]
+                                )
+                            }
+
+                            ActionButton {
+                                id: loadMatchingProfileButton
+                                text: "Load board match"
+                                enabled: DeviceController.matchingProfileName !== ""
+                                KeyNavigation.up: loadProfileButton
+                                KeyNavigation.down: deleteProfileButton
+                                onClicked: DeviceController.LoadMatchingProfile()
+                            }
+
+                            ActionButton {
+                                id: deleteProfileButton
+                                text: "Delete"
+                                enabled: profileList.currentIndex >= 0
+                                KeyNavigation.up: loadMatchingProfileButton
+                                KeyNavigation.down: resetDefaultsButton
+                                onClicked: DeviceController.DeleteProfile(
+                                    DeviceController.profileNames[profileList.currentIndex]
+                                )
+                            }
+                        }
+
+                        Text {
+                            Layout.fillWidth: true
+                            text: "Loading a preset changes the app locally. Press Save settings to upload it to the connected ESP32."
+                            color: Theme.textSecondary
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 10
+                            wrapMode: Text.WordWrap
+                        }
+                    }
+                }
+            }
+
         }
 
         RowLayout {
@@ -1624,11 +1890,7 @@ FocusScope {
                                     : Theme.warning)
                                 : DeviceController.settingsDirty
                                     ? Theme.warning
-                                    : DeviceController.settingsSyncStatus.indexOf("uploaded") >= 0
-                                        ? Theme.green
-                                        : DeviceController.settingsSyncStatus !== ""
-                                            ? Theme.warning
-                                            : Theme.textSecondary
+                                    : Theme.textSecondary
                 font.family: Theme.fontFamily
                 font.pixelSize: 10
                 elide: Text.ElideRight
@@ -1660,7 +1922,9 @@ FocusScope {
                                     ? gyroToleranceRow.slider
                                     : root.activeCategory === 5
                                         ? livePanel
-                                        : diagnosticsButton
+                                        : root.activeCategory === 6
+                                            ? diagnosticsButton
+                                            : deleteProfileButton
                 KeyNavigation.right: saveSettingsButton
                 onClicked: DeviceController.ResetDefaults()
             }
@@ -1683,7 +1947,9 @@ FocusScope {
                                     ? gyroToleranceRow.slider
                                     : root.activeCategory === 5
                                         ? livePanel
-                                        : diagnosticsButton
+                                        : root.activeCategory === 6
+                                            ? diagnosticsButton
+                                            : deleteProfileButton
                 enabled: DeviceController.settingsDirty
                 onClicked: DeviceController.SaveSettings()
             }

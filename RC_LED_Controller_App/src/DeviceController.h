@@ -1,8 +1,10 @@
 #pragma once
 
 #include <QByteArray>
+#include <QJsonObject>
 #include <QObject>
 #include <QString>
+#include <QStringList>
 #include <QVector>
 
 class QBluetoothDeviceDiscoveryAgent;
@@ -42,6 +44,36 @@ class FDeviceController final : public QObject
         QString firmwareVersion
         READ GetFirmwareVersion
         NOTIFY DeviceInformationChanged
+    )
+
+    Q_PROPERTY(
+        QString boardName
+        READ GetBoardName
+        NOTIFY DeviceInformationChanged
+    )
+
+    Q_PROPERTY(
+        QString boardId
+        READ GetBoardId
+        NOTIFY DeviceInformationChanged
+    )
+
+    Q_PROPERTY(
+        QStringList profileNames
+        READ GetProfileNames
+        NOTIFY ProfilesChanged
+    )
+
+    Q_PROPERTY(
+        QString activeProfileName
+        READ GetActiveProfileName
+        NOTIFY ProfilesChanged
+    )
+
+    Q_PROPERTY(
+        QString matchingProfileName
+        READ GetMatchingProfileName
+        NOTIFY ProfilesChanged
     )
 
     Q_PROPERTY(
@@ -266,6 +298,11 @@ public:
     const QString& GetConnectionStatus() const;
     const QString& GetDeviceName() const;
     const QString& GetFirmwareVersion() const;
+    const QString& GetBoardName() const;
+    const QString& GetBoardId() const;
+    QStringList GetProfileNames() const;
+    const QString& GetActiveProfileName() const;
+    QString GetMatchingProfileName() const;
 
     bool ArePassiveLightsEnabled() const;
     bool AreActiveLightsEnabled() const;
@@ -296,6 +333,10 @@ public:
 
     Q_INVOKABLE int GetChannelRole(int aChannel) const;
     Q_INVOKABLE void SetChannelRole(int aChannel, int aRole);
+    Q_INVOKABLE void SaveProfile(const QString& aProfileName);
+    Q_INVOKABLE bool LoadProfile(const QString& aProfileName);
+    Q_INVOKABLE void DeleteProfile(const QString& aProfileName);
+    Q_INVOKABLE bool LoadMatchingProfile();
 
     int GetSteeringPulseUs() const;
     int GetSteeringPercent() const;
@@ -354,6 +395,7 @@ public slots:
     void SetLeftTurnLightsChannel(int aChannel);
     void SetRightTurnLightsChannel(int aChannel);
     void SetHeadlightServoChannel(int aChannel);
+    void SetBoardName(const QString& aBoardName);
     void SetPendingServoClosedPulseUs(int aPulseUs);
     void SetPendingServoOpenPulseUs(int aPulseUs);
     void ZeroServo();
@@ -370,6 +412,7 @@ signals:
     void SettingsSaveCompleted(bool aUploaded, bool aStoredLocally);
     void TelemetryChanged();
     void DiagnosticsChanged();
+    void ProfilesChanged();
 
 private slots:
     void HandleDeviceDiscovered(
@@ -423,6 +466,9 @@ private:
 
     void LoadLocalSettings();
     bool StoreLocalSettings() const;
+    QJsonObject BuildSettingsObject() const;
+    bool ApplySettingsObject(const QJsonObject& aSettingsObject);
+    QString NormalizeProfileName(const QString& aProfileName) const;
     void SendSettingsToController();
     void BeginSettingsUpload();
 
@@ -457,6 +503,14 @@ private:
 
     QString FirmwareVersion =
         QStringLiteral("--");
+
+    QString BoardName =
+        QStringLiteral("Unassigned body");
+
+    QString BoardId =
+        QStringLiteral("--");
+
+    QString ActiveProfileName;
 
     bool bPassiveLightsEnabled = true;
     bool bActiveLightsEnabled = true;

@@ -14,6 +14,8 @@ struct FControllerConfiguration
 
     bool bAccelerometerExhaustEnabled = true;
 
+    char BoardName[32] = "Unassigned body";
+
     float ExhaustTriggerThresholdG = 0.06f;
     uint8_t AccelerometerForwardAxis = 0;
     bool bAccelerometerForwardInverted = false;
@@ -36,7 +38,7 @@ struct FControllerConfiguration
     uint8_t HeadlightServoChannel = 12;
 
     // Role assigned to each PCA9685 channel. Multiple channels may share
-    // the same role; 0 means unused.
+    // the same role; 0 means unused. Role 9 is white reverse lights.
     uint8_t ChannelRoles[16] = {
         1, 2, 3, 0, 0, 0, 0, 0,
         0, 0, 0, 0, 7, 4, 5, 6

@@ -60,24 +60,27 @@ SET,TAIL_LIGHTS_CHANNEL,0..15
 SET,LEFT_TURN_LIGHTS_CHANNEL,0..15
 SET,RIGHT_TURN_LIGHTS_CHANNEL,0..15
 SET,HEADLIGHT_SERVO_CHANNEL,0..15
-SET,CHANNEL_ROLE_0,0..8
-SET,CHANNEL_ROLE_1,0..8
-SET,CHANNEL_ROLE_2,0..8
-SET,CHANNEL_ROLE_3,0..8
-SET,CHANNEL_ROLE_4,0..8
-SET,CHANNEL_ROLE_5,0..8
-SET,CHANNEL_ROLE_6,0..8
-SET,CHANNEL_ROLE_7,0..8
-SET,CHANNEL_ROLE_8,0..8
-SET,CHANNEL_ROLE_9,0..8
-SET,CHANNEL_ROLE_10,0..8
-SET,CHANNEL_ROLE_11,0..8
-SET,CHANNEL_ROLE_12,0..8
-SET,CHANNEL_ROLE_13,0..8
-SET,CHANNEL_ROLE_14,0..8
-SET,CHANNEL_ROLE_15,0..8
+SET,CHANNEL_ROLE_0,0..9
+SET,CHANNEL_ROLE_1,0..9
+SET,CHANNEL_ROLE_2,0..9
+SET,CHANNEL_ROLE_3,0..9
+SET,CHANNEL_ROLE_4,0..9
+SET,CHANNEL_ROLE_5,0..9
+SET,CHANNEL_ROLE_6,0..9
+SET,CHANNEL_ROLE_7,0..9
+SET,CHANNEL_ROLE_8,0..9
+SET,CHANNEL_ROLE_9,0..9
+SET,CHANNEL_ROLE_10,0..9
+SET,CHANNEL_ROLE_11,0..9
+SET,CHANNEL_ROLE_12,0..9
+SET,CHANNEL_ROLE_13,0..9
+SET,CHANNEL_ROLE_14,0..9
+SET,CHANNEL_ROLE_15,0..9
+SET,BOARD_NAME,text-without-commas
 
 TEST,EXHAUST
+TEST,SERVO,<channel>,<pcaPulse>
+TEST,SERVO_CLEAR
 SAVE
 RESET
 ```
@@ -87,5 +90,19 @@ to NVS. `RESET` restores and stores firmware defaults.
 
 Channel role values are: `0` unused, `1` exhaust light 1, `2` exhaust light 2,
 `3` passive lights, `4` tail lights, `5` left turning lights, `6` right turning
-lights, `7` headlight servo, and `8` cooling fans. Any number of channels may
-share the same role.
+lights, `7` headlight servo, `8` cooling fans, and `9` white reverse lights.
+Any number of channels may share the same role.
+
+The `HELLO` response is:
+
+```text
+HELLO,protocol,transport_name,firmware_version,board_name,board_id
+```
+
+`board_name` is stored on the ESP32. `board_id` is the ESP32 hardware ID and
+can be used by the app to match a vehicle profile.
+
+`TEST,SERVO,<channel>,<pcaPulse>` is a temporary direct-output diagnostic. It
+writes the requested raw PCA9685 pulse count (0..4095) to the selected physical
+channel (0..15), bypassing channel roles and saved servo settings. The test
+remains active until `TEST,SERVO_CLEAR` is received or the controller restarts.

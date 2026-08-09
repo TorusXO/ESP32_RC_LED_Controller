@@ -46,6 +46,15 @@ public:
         uint32_t aCurrentTimeMs
     );
 
+    // Debug-only direct PCA9685 servo output. This bypasses channel roles
+    // and remains active until ClearServoTestPosition() is called.
+    void SetServoTestPosition(
+        uint8_t aChannel,
+        uint16_t aPulse
+    );
+
+    void ClearServoTestPosition();
+
     ETurnDirection GetActiveTurnDirection() const;
     bool IsBrakeOrReverseActive() const;
     bool IsExhaustPulseActive() const;
@@ -116,6 +125,10 @@ private:
     bool bBrakeOrReverseActive = false;
     bool bExhaustPulseActive = false;
     bool bManualExhaustPulseActive = false;
+
+    bool bServoTestOverrideActive = false;
+    uint8_t ServoTestChannel = 0;
+    uint16_t ServoTestPulse = 0;
 
     int16_t PreviousThrottlePercent = 0;
     float PreviousFilteredForwardAccelerationG = 0.0f;
