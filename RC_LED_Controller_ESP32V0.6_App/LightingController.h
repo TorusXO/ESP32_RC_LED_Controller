@@ -57,6 +57,7 @@ public:
 
     ETurnDirection GetActiveTurnDirection() const;
     bool IsBrakeOrReverseActive() const;
+    bool IsReverseActive() const;
     bool IsExhaustPulseActive() const;
 
 private:
@@ -123,6 +124,9 @@ private:
         ETurnDirection::None;
 
     bool bBrakeOrReverseActive = false;
+    bool bReverseActive = false;
+    bool bReverseArmed = false;
+    bool bReverseModeEnabled = false;
     bool bExhaustPulseActive = false;
     bool bManualExhaustPulseActive = false;
 

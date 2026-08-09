@@ -800,6 +800,13 @@ void PrintDiagnostics(
 
     if (aThrottleSnapshotRef.bHasSignal)
     {
+        const char* RearStateText =
+            LightingController.IsReverseActive()
+                ? "REVERSE"
+                : LightingController.IsBrakeOrReverseActive()
+                    ? "BRAKE"
+                    : "REAR DIM";
+
         snprintf(
             ThrottleText,
             sizeof(ThrottleText),
@@ -808,9 +815,7 @@ void PrintDiagnostics(
                 aThrottleSnapshotRef.PulseWidthUs
                 ),
             aThrottleSnapshotRef.InputPercent,
-            LightingController.IsBrakeOrReverseActive()
-            ? "REAR BRIGHT"
-            : "REAR DIM"
+            RearStateText
         );
     }
     else
@@ -912,7 +917,8 @@ void SendBluetoothTelemetry(
         aAccelerationStateRef.GyroscopeZDps,
         GetTurnDirectionText(),
         LightingController.IsBrakeOrReverseActive(),
-        LightingController.IsExhaustPulseActive()
+        LightingController.IsExhaustPulseActive(),
+        LightingController.IsReverseActive()
     );
 }
 

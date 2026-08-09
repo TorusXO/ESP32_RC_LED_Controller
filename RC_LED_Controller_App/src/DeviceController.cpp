@@ -407,6 +407,11 @@ bool FDeviceController::IsBrakeActive() const
     return bBrakeActive;
 }
 
+bool FDeviceController::IsReverseActive() const
+{
+    return bReverseActive;
+}
+
 bool FDeviceController::IsExhaustPulseActive() const
 {
     return bExhaustPulseActive;
@@ -2052,6 +2057,10 @@ void FDeviceController::ParseTelemetry(
 
     bExhaustPulseActive =
         aFieldsRef[17].toInt() != 0;
+
+    bReverseActive =
+        aFieldsRef.size() > 18 &&
+        aFieldsRef[18].toInt() != 0;
 
     emit TelemetryChanged();
     emit DiagnosticsChanged();

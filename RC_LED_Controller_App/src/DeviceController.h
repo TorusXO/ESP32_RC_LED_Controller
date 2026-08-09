@@ -263,6 +263,12 @@ class FDeviceController final : public QObject
     )
 
     Q_PROPERTY(
+        bool reverseActive
+        READ IsReverseActive
+        NOTIFY TelemetryChanged
+    )
+
+    Q_PROPERTY(
         bool exhaustPulseActive
         READ IsExhaustPulseActive
         NOTIFY TelemetryChanged
@@ -351,6 +357,7 @@ public:
     double GetGyroscopeZDps() const;
     const QString& GetTurnDirection() const;
     bool IsBrakeActive() const;
+    bool IsReverseActive() const;
     bool IsExhaustPulseActive() const;
     bool HasSteeringSignal() const;
     bool HasThrottleSignal() const;
@@ -565,6 +572,7 @@ private:
         QStringLiteral("NONE");
 
     bool bBrakeActive = false;
+    bool bReverseActive = false;
     bool bExhaustPulseActive = false;
     bool bSteeringSignalPresent = false;
     bool bThrottleSignalPresent = false;

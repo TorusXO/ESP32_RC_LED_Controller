@@ -334,7 +334,8 @@ void FControllerProtocol::SendTelemetry(
     float aGyroscopeZDps,
     const char* aTurnDirectionPtr,
     bool aBrakeActive,
-    bool aExhaustPulseActive
+    bool aExhaustPulseActive,
+    bool aReverseActive
 )
 {
     if (
@@ -348,7 +349,7 @@ void FControllerProtocol::SendTelemetry(
     BluetoothSerialPortPtr->printf(
         "TEL,%lu,%u,%lu,%d,%u,%lu,%d,"
         "%.3f,%.3f,%.3f,%.3f,"
-        "%.1f,%.1f,%.1f,%s,%u,%u\n",
+        "%.1f,%.1f,%.1f,%s,%u,%u,%u\n",
         static_cast<unsigned long>(
             aCurrentTimeMs
         ),
@@ -371,7 +372,8 @@ void FControllerProtocol::SendTelemetry(
         aGyroscopeZDps,
         aTurnDirectionPtr,
         aBrakeActive ? 1U : 0U,
-        aExhaustPulseActive ? 1U : 0U
+        aExhaustPulseActive ? 1U : 0U,
+        aReverseActive ? 1U : 0U
     );
 }
 

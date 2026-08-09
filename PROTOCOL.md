@@ -14,7 +14,7 @@ CFG,passive,active,exhaust,headlightOpen,fans,accelerometer,triggerG,activeBrigh
 ```
 
 ```text
-TEL,millis,ch1Valid,ch1Us,ch1Percent,ch2Valid,ch2Us,ch2Percent,forwardG,filteredForwardG,sideG,verticalG,gyroX,gyroY,gyroZ,turn,brake,exhaustPulse
+TEL,millis,ch1Valid,ch1Us,ch1Percent,ch2Valid,ch2Us,ch2Percent,forwardG,filteredForwardG,sideG,verticalG,gyroX,gyroY,gyroZ,turn,brake,exhaustPulse,reverse
 ```
 
 ```text

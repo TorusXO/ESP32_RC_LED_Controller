@@ -49,7 +49,8 @@ public:
         float aGyroscopeZDps,
         const char* aTurnDirectionPtr,
         bool aBrakeActive,
-        bool aExhaustPulseActive
+        bool aExhaustPulseActive,
+        bool aReverseActive
     );
 
     void SendDiagnostics(

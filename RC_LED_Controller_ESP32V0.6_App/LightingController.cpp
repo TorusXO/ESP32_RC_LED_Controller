@@ -107,6 +107,15 @@ bool FLightingController::Begin()
     bBrakeOrReverseActive =
         false;
 
+    bReverseActive =
+        false;
+
+    bReverseArmed =
+        false;
+
+    bReverseModeEnabled =
+        false;
+
     bExhaustPulseActive =
         false;
 
@@ -116,12 +125,12 @@ bool FLightingController::Begin()
     PreviousThrottlePercent = 0;
     PreviousFilteredForwardAccelerationG = 0.0f;
 
+    // Tail lights keep their dim running-light level independently of the
+    // passive-light toggle. Role 3 is the only role controlled by that toggle.
     CurrentRearBrightness =
-        Configuration.bPassiveLightsEnabled
-            ? ConvertPercentToBrightness(
-                Configuration.DimBrightnessPercent
-            )
-            : LED_OFF_BRIGHTNESS;
+        ConvertPercentToBrightness(
+            Configuration.DimBrightnessPercent
+        );
 
     CurrentLeftTurnBrightness =
         LED_OFF_BRIGHTNESS;
@@ -136,7 +145,7 @@ bool FLightingController::Begin()
     SetRoleBrightness(6, CurrentRightTurnBrightness);
     SetRoleBrightness(
         9,
-        bBrakeOrReverseActive
+        bReverseActive
             ? LED_FULL_BRIGHTNESS
             : LED_OFF_BRIGHTNESS
     );
@@ -353,19 +362,42 @@ void FLightingController::UpdateRearLightState(
         bBrakeOrReverseActive =
             false;
 
+        bReverseActive =
+            false;
+
+        bReverseArmed =
+            false;
+
+        bReverseModeEnabled =
+            false;
+
         return;
     }
 
-    if (!bBrakeOrReverseActive)
+    if (
+        aInputStateRef.ThrottlePercent <=
+        BRAKE_REVERSE_ACTIVATION_PERCENT
+    )
     {
         if (
-            aInputStateRef.ThrottlePercent <=
-            BRAKE_REVERSE_ACTIVATION_PERCENT
+            bReverseArmed ||
+            bReverseModeEnabled
         )
         {
-            bBrakeOrReverseActive =
+            bReverseActive =
                 true;
+
+            bReverseModeEnabled =
+                true;
+
+            bReverseArmed =
+                false;
         }
+
+        // The first reverse-direction command is always treated as braking.
+        // Reverse becomes available only after the stick returns to neutral.
+        bBrakeOrReverseActive =
+            true;
 
         return;
     }
@@ -375,7 +407,31 @@ void FLightingController::UpdateRearLightState(
         BRAKE_REVERSE_DEACTIVATION_PERCENT
     )
     {
+        if (
+            bBrakeOrReverseActive &&
+            !bReverseActive
+        )
+        {
+            // Brake -> neutral arms the next reverse-direction command.
+            bReverseArmed =
+                true;
+        }
+
+        if (aInputStateRef.ThrottlePercent > 0)
+        {
+            // A forward command cancels the brake-to-reverse sequence and
+            // exits reverse mode so the next reverse command brakes first.
+            bReverseArmed =
+                false;
+
+            bReverseModeEnabled =
+                false;
+        }
+
         bBrakeOrReverseActive =
+            false;
+
+        bReverseActive =
             false;
     }
 }
@@ -508,11 +564,6 @@ void FLightingController::ApplyLightingOutputs(
             Configuration.ActiveBrightnessPercent
         );
 
-    const uint16_t DimBrightness =
-        ConvertPercentToBrightness(
-            Configuration.DimBrightnessPercent
-        );
-
     const uint32_t BlinkElapsedTimeMs =
         aCurrentTimeMs -
         TurnBlinkStartTimeMs;
@@ -539,9 +590,9 @@ void FLightingController::ApplyLightingOutputs(
         bBlinkIsOn;
 
     uint16_t RearTargetBrightness =
-        Configuration.bPassiveLightsEnabled
-            ? DimBrightness
-            : LED_OFF_BRIGHTNESS;
+        ConvertPercentToBrightness(
+            Configuration.DimBrightnessPercent
+        );
 
     if (
         Configuration.bActiveLightsEnabled &&
@@ -597,7 +648,7 @@ void FLightingController::ApplyLightingOutputs(
     SetRoleBrightness(6, CurrentRightTurnBrightness);
     SetRoleBrightness(
         9,
-        bBrakeOrReverseActive
+        bReverseActive
             ? LED_FULL_BRIGHTNESS
             : LED_OFF_BRIGHTNESS
     );
@@ -957,6 +1008,11 @@ FLightingController::GetActiveTurnDirection() const
 bool FLightingController::IsBrakeOrReverseActive() const
 {
     return bBrakeOrReverseActive;
+}
+
+bool FLightingController::IsReverseActive() const
+{
+    return bReverseActive;
 }
 
 bool FLightingController::IsExhaustPulseActive() const
