@@ -24,6 +24,14 @@ You can select how much light you need in the app so waste less battery, or you 
 
 You can control servos from the setup. Right now it's setup for only a single purpose to have the servo work as opener for pop-up headlights, but you can use it basically for any other purpose. 
 
+You can have the exhaust leds, 2 of them of different colors like blue and orange or red to imitate the exhaust flares, this works based on the throttle + accelerometer readings. 
+
+In the app you can calibrate/setup the servo/gyro of the controller, you can calibrate how much angle you need from a servo. 
+
+The app also has profiles in case if you have multiple car bodies and want to install the other controllers in them. 
+
+You can also do a small diagnostics for assembly step in the app - it detects which boards are connected, if some board isnt showing up - check soldering/connections/wires, use multimeter to check that the connection is there. 
+
 The pinout for soldering: 
 On esp32: 
 * D21 - SDA
