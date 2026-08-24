@@ -1,3 +1,5 @@
+
+
 This is a combination of Android app and esp32 program based on arduino code. 
 
 The purpose of the project is to have more control over LEDs in RC cars. The setup made mainly for RC drift cars but can also work with any RC with similar setup.
@@ -29,3 +31,5 @@ On esp32:
 * D35 - Ch1 signal
 * D25 - Ch2 signal
 On PCA9685 you need to connect 5v output to the central piece of the board. Use the left side for soldering up the SDA, SCL and 3v3 pins, dont try to connect the MPU6050 with the right side of the PCA9685, even though they must share the i2c pins it didn't work for me, so I end up connecting SDA,SCL,3v3  directly from esp32
+<img width="2424" height="1754" alt="IMG_7220" src="https://github.com/user-attachments/assets/1f5a5b55-bf97-489a-a84b-8381b42b8ef7" />
+<img width="2836" height="2156" alt="IMG_7219" src="https://github.com/user-attachments/assets/0c64f88f-6676-4508-a5a1-7439c57c2e9a" />
