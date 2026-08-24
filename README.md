@@ -54,3 +54,5 @@ The app is build for android 13 specifically for Retroid pocket 5, so you might 
 <img width="1280" height="720" alt="photo_5215592887817544381_y" src="https://github.com/user-attachments/assets/bc111109-8efd-4aec-a947-7daccd2a94e2" />
 <img width="1280" height="720" alt="photo_5215592887817544383_y" src="https://github.com/user-attachments/assets/27581c69-ece0-47bf-a120-72fc1840656f" />
 <img width="1280" height="720" alt="photo_5215592887817544382_y" src="https://github.com/user-attachments/assets/d892cc41-221c-4fc6-9bd7-56421f20f973" />
+
+As you can see I inteded to use the controller for fans controls as well, but it isn't finished yet, right now you can only hookup 5v small fans into PCA board but it's not gonna do much - you will just get a passive fans, since most of them only have 2 pins. That means we need more electronics to control properly the 2pin fans, which I don't want to mess with yet.
