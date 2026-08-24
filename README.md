@@ -43,3 +43,8 @@ On PCA9685 you need to connect 5v output to the central piece of the board. Use 
 <img width="2424" height="1754" alt="IMG_7220" src="https://github.com/user-attachments/assets/1f5a5b55-bf97-489a-a84b-8381b42b8ef7" />
 <img width="2836" height="2156" alt="IMG_7219" src="https://github.com/user-attachments/assets/0c64f88f-6676-4508-a5a1-7439c57c2e9a" />
 Ill soon get the PCB I made for this setup so it will look less messy and more compact. Probably will post it on Patreon since i've put much effort to the whole project, so if you would want to support me you can do it there.
+
+
+<img width="1280" height="720" alt="photo_5215592887817544381_y" src="https://github.com/user-attachments/assets/bc111109-8efd-4aec-a947-7daccd2a94e2" />
+<img width="1280" height="720" alt="photo_5215592887817544383_y" src="https://github.com/user-attachments/assets/27581c69-ece0-47bf-a120-72fc1840656f" />
+<img width="1280" height="720" alt="photo_5215592887817544382_y" src="https://github.com/user-attachments/assets/d892cc41-221c-4fc6-9bd7-56421f20f973" />
