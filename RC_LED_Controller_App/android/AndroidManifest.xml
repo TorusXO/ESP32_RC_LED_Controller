@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <manifest
     xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.spiralknightsinvoked.rcledcontroller"
+    package="com.rcledcontroller.app"
     android:installLocation="auto">
 
     <uses-feature
@@ -37,7 +37,7 @@
         android:theme="@style/AppTheme">
 
         <activity
-            android:name="com.spiralknightsinvoked.rcledcontroller.RetroidActivity"
+            android:name="com.rcledcontroller.app.RetroidActivity"
             android:configChanges="orientation|uiMode|screenLayout|screenSize|smallestScreenSize|density|keyboard|keyboardHidden|navigation|fontScale|locale|layoutDirection|mcc|mnc|colorMode"
             android:exported="true"
             android:launchMode="singleTop"

@@ -10,7 +10,7 @@ HELLO,1,RC_LED_CONTROLLER,0.6
 ```
 
 ```text
-CFG,passive,active,exhaust,headlightOpen,fans,accelerometer,triggerG,activeBrightness,dimBrightness,fanSpeed,exhaust1Channel,exhaust2Channel,passiveChannel,tailChannel,leftTurnChannel,rightTurnChannel,servoChannel,channelRole0,...,channelRole15,servoClosedPulse,servoOpenPulse,forwardAxis,forwardInverted,accelerometerToleranceG
+CFG,passive,active,exhaust,headlightOpen,fans,accelerometer,triggerG,activeBrightness,dimBrightness,fanSpeed,exhaust1Channel,exhaust2Channel,passiveChannel,tailChannel,leftTurnChannel,rightTurnChannel,servoChannel,channelRole0,...,channelRole15,servoClosedPulse,servoOpenPulse,forwardAxis,forwardInverted,accelerometerToleranceG,exhaust3Channel
 ```
 
 ```text
@@ -55,30 +55,35 @@ SET,SERVO_OPEN_PULSE,0..4095
 SET,SERVO_ZERO,1
 SET,EXHAUST_LIGHT_1_CHANNEL,0..15
 SET,EXHAUST_LIGHT_2_CHANNEL,0..15
+SET,EXHAUST_LIGHT_3_CHANNEL,0..15
 SET,PASSIVE_LIGHTS_CHANNEL,0..15
 SET,TAIL_LIGHTS_CHANNEL,0..15
 SET,LEFT_TURN_LIGHTS_CHANNEL,0..15
 SET,RIGHT_TURN_LIGHTS_CHANNEL,0..15
 SET,HEADLIGHT_SERVO_CHANNEL,0..15
-SET,CHANNEL_ROLE_0,0..9
-SET,CHANNEL_ROLE_1,0..9
-SET,CHANNEL_ROLE_2,0..9
-SET,CHANNEL_ROLE_3,0..9
-SET,CHANNEL_ROLE_4,0..9
-SET,CHANNEL_ROLE_5,0..9
-SET,CHANNEL_ROLE_6,0..9
-SET,CHANNEL_ROLE_7,0..9
-SET,CHANNEL_ROLE_8,0..9
-SET,CHANNEL_ROLE_9,0..9
-SET,CHANNEL_ROLE_10,0..9
-SET,CHANNEL_ROLE_11,0..9
-SET,CHANNEL_ROLE_12,0..9
-SET,CHANNEL_ROLE_13,0..9
-SET,CHANNEL_ROLE_14,0..9
-SET,CHANNEL_ROLE_15,0..9
+SET,CHANNEL_ROLE_0,0..10
+SET,CHANNEL_ROLE_1,0..10
+SET,CHANNEL_ROLE_2,0..10
+SET,CHANNEL_ROLE_3,0..10
+SET,CHANNEL_ROLE_4,0..10
+SET,CHANNEL_ROLE_5,0..10
+SET,CHANNEL_ROLE_6,0..10
+SET,CHANNEL_ROLE_7,0..10
+SET,CHANNEL_ROLE_8,0..10
+SET,CHANNEL_ROLE_9,0..10
+SET,CHANNEL_ROLE_10,0..10
+SET,CHANNEL_ROLE_11,0..10
+SET,CHANNEL_ROLE_12,0..10
+SET,CHANNEL_ROLE_13,0..10
+SET,CHANNEL_ROLE_14,0..10
+SET,CHANNEL_ROLE_15,0..10
 SET,BOARD_NAME,text-without-commas
 
 TEST,EXHAUST
+TEST,EXHAUST,R
+TEST,EXHAUST,G
+TEST,EXHAUST,B
+TEST,EXHAUST,OFF
 TEST,SERVO,<channel>,<pcaPulse>
 TEST,SERVO_CLEAR
 SAVE
@@ -88,10 +93,22 @@ RESET
 `SET` changes RAM immediately. `SAVE` writes the current complete configuration
 to NVS. `RESET` restores and stores firmware defaults.
 
-Channel role values are: `0` unused, `1` exhaust light 1, `2` exhaust light 2,
+Channel role values are: `0` unused, `1` exhaust red, `2` exhaust green,
 `3` passive lights, `4` tail lights, `5` left turning lights, `6` right turning
-lights, `7` headlight servo, `8` cooling fans, and `9` white reverse lights.
+lights, `7` headlight servo, `8` cooling fans, `9` white reverse lights, and
+`10` exhaust blue.
 Any number of channels may share the same role.
+
+`TEST,EXHAUST` previews a 180 ms flame. The optional `R`, `G`, or `B`
+argument holds only the corresponding exhaust role at full brightness for two
+seconds, with the other two exhaust roles off. A new test replaces the previous
+one; `OFF` stops it immediately and allows normal driving effects to resume.
+Tests work without an RC signal and bypass the exhaust enable/brightness settings.
+They use the role assignments currently stored in ESP32 RAM, so upload edited
+assignments before testing. Test commands do not change saved settings.
+Invalid color arguments return `ERR,INVALID_EXHAUST_COLOR`. Accepted tests return
+the existing `ACK,TEST_EXHAUST,1` response. Older firmware must be updated before
+using per-color tests (it may treat these as a normal flame preview).
 
 The `HELLO` response is:
 

@@ -154,12 +154,13 @@ bool FControllerProtocol::ConsumeConfigurationChanged()
     return bWasChanged;
 }
 
-bool FControllerProtocol::ConsumeExhaustTestRequested()
+bool FControllerProtocol::ConsumeExhaustTestRequested(uint8_t& aRole)
 {
     const bool bWasRequested =
         bExhaustTestRequested;
 
     bExhaustTestRequested = false;
+    aRole = ExhaustTestRole;
     return bWasRequested;
 }
 
@@ -261,7 +262,7 @@ void FControllerProtocol::SendConfiguration()
     BluetoothSerialPortPtr->printf(
         "CFG,%u,%u,%u,%u,%u,%u,%.3f,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,"
         "%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,"
-        "%u,%u,%.3f\n",
+        "%u,%u,%.3f,%u\n",
         ConfigurationPtr->bPassiveLightsEnabled
             ? 1U
             : 0U,
@@ -313,7 +314,8 @@ void FControllerProtocol::SendConfiguration()
         ConfigurationPtr->bAccelerometerForwardInverted
             ? 1U
             : 0U,
-        ConfigurationPtr->AccelerometerToleranceG
+        ConfigurationPtr->AccelerometerToleranceG,
+        ConfigurationPtr->ExhaustLight3Channel
     );
 }
 
@@ -513,6 +515,22 @@ void FControllerProtocol::HandleCommand(
             strcmp(KeyPtr, "EXHAUST") == 0
         )
         {
+            const char* ColorPtr = strtok_r(nullptr, ",", &SaveStatePtr);
+            uint8_t Role = 0;
+            if (ColorPtr != nullptr)
+            {
+                if (strcmp(ColorPtr, "R") == 0) Role = 1;
+                else if (strcmp(ColorPtr, "G") == 0) Role = 2;
+                else if (strcmp(ColorPtr, "B") == 0) Role = 10;
+                else if (strcmp(ColorPtr, "OFF") == 0) Role = 255;
+                else { SendError("INVALID_EXHAUST_COLOR"); return; }
+            }
+            if (strtok_r(nullptr, ",", &SaveStatePtr) != nullptr)
+            {
+                SendError("INVALID_EXHAUST_COLOR");
+                return;
+            }
+            ExhaustTestRole = Role;
             bExhaustTestRequested = true;
             SendAcknowledgement(
                 "TEST_EXHAUST",
@@ -811,6 +829,10 @@ void FControllerProtocol::HandleSetCommand(
     {
         ConfigurationPtr->ExhaustLight2Channel = ParseChannel(aValuePtr);
     }
+    else if (strcmp(aKeyPtr, "EXHAUST_LIGHT_3_CHANNEL") == 0)
+    {
+        ConfigurationPtr->ExhaustLight3Channel = ParseChannel(aValuePtr);
+    }
     else if (strcmp(aKeyPtr, "PASSIVE_LIGHTS_CHANNEL") == 0)
     {
         ConfigurationPtr->PassiveLightsChannel = ParseChannel(aValuePtr);
@@ -841,7 +863,7 @@ void FControllerProtocol::HandleSetCommand(
         }
 
         ConfigurationPtr->ChannelRoles[Channel] = static_cast<uint8_t>(
-            constrain(atoi(aValuePtr), 0, 9)
+            constrain(atoi(aValuePtr), 0, 10)
         );
     }
     else
@@ -966,6 +988,7 @@ void FControllerProtocol::LoadConfiguration()
 
     ConfigurationPtr->ExhaustLight1Channel = ControllerPreferences.getUChar("exhaust1", ConfigurationPtr->ExhaustLight1Channel);
     ConfigurationPtr->ExhaustLight2Channel = ControllerPreferences.getUChar("exhaust2", ConfigurationPtr->ExhaustLight2Channel);
+    ConfigurationPtr->ExhaustLight3Channel = ControllerPreferences.getUChar("exhaust3", ConfigurationPtr->ExhaustLight3Channel);
     ConfigurationPtr->PassiveLightsChannel = ControllerPreferences.getUChar("passivech", ConfigurationPtr->PassiveLightsChannel);
     ConfigurationPtr->TailLightsChannel = ControllerPreferences.getUChar("tailch", ConfigurationPtr->TailLightsChannel);
     ConfigurationPtr->LeftTurnLightsChannel = ControllerPreferences.getUChar("leftch", ConfigurationPtr->LeftTurnLightsChannel);
@@ -1119,6 +1142,7 @@ bool FControllerProtocol::SaveConfiguration()
 
     ControllerPreferences.putUChar("exhaust1", ConfigurationPtr->ExhaustLight1Channel);
     ControllerPreferences.putUChar("exhaust2", ConfigurationPtr->ExhaustLight2Channel);
+    ControllerPreferences.putUChar("exhaust3", ConfigurationPtr->ExhaustLight3Channel);
     ControllerPreferences.putUChar("passivech", ConfigurationPtr->PassiveLightsChannel);
     ControllerPreferences.putUChar("tailch", ConfigurationPtr->TailLightsChannel);
     ControllerPreferences.putUChar("leftch", ConfigurationPtr->LeftTurnLightsChannel);

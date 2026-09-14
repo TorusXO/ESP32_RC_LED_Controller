@@ -384,12 +384,14 @@ void loop()
         );
     }
 
+    uint8_t ExhaustTestRole = 0;
     if (
-        ControllerProtocol.ConsumeExhaustTestRequested()
+        ControllerProtocol.ConsumeExhaustTestRequested(ExhaustTestRole)
     )
     {
         LightingController.TriggerExhaustTest(
-            CurrentTimeMs
+            CurrentTimeMs,
+            ExhaustTestRole
         );
     }
 

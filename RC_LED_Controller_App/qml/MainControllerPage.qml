@@ -15,6 +15,15 @@ FocusScope {
     property bool pendingHeadlightsOpen: DeviceController.headlightsOpen
     property bool pendingFansEnabled: DeviceController.fansEnabled
 
+    Connections {
+        target: DeviceController
+
+        function onConfigurationChanged() {
+            root.pendingHeadlightsOpen = DeviceController.headlightsOpen
+            root.pendingFansEnabled = DeviceController.fansEnabled
+        }
+    }
+
     function focusFirstControl() {
         passiveRow.forceActiveFocus()
     }

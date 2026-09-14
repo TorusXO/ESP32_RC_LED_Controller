@@ -156,6 +156,7 @@ class FDeviceController final : public QObject
 
     Q_PROPERTY(int exhaustLight1Channel READ GetExhaustLight1Channel NOTIFY ConfigurationChanged)
     Q_PROPERTY(int exhaustLight2Channel READ GetExhaustLight2Channel NOTIFY ConfigurationChanged)
+    Q_PROPERTY(int exhaustLight3Channel READ GetExhaustLight3Channel NOTIFY ConfigurationChanged)
     Q_PROPERTY(int passiveLightsChannel READ GetPassiveLightsChannel NOTIFY ConfigurationChanged)
     Q_PROPERTY(int tailLightsChannel READ GetTailLightsChannel NOTIFY ConfigurationChanged)
     Q_PROPERTY(int leftTurnLightsChannel READ GetLeftTurnLightsChannel NOTIFY ConfigurationChanged)
@@ -325,6 +326,7 @@ public:
     int GetFanSpeedPercent() const;
     int GetExhaustLight1Channel() const;
     int GetExhaustLight2Channel() const;
+    int GetExhaustLight3Channel() const;
     int GetPassiveLightsChannel() const;
     int GetTailLightsChannel() const;
     int GetLeftTurnLightsChannel() const;
@@ -397,6 +399,7 @@ public slots:
     void SetPendingFanSpeedPercent(int aSpeedPercent);
     void SetExhaustLight1Channel(int aChannel);
     void SetExhaustLight2Channel(int aChannel);
+    void SetExhaustLight3Channel(int aChannel);
     void SetPassiveLightsChannel(int aChannel);
     void SetTailLightsChannel(int aChannel);
     void SetLeftTurnLightsChannel(int aChannel);
@@ -410,6 +413,7 @@ public slots:
     void SaveSettings();
     void ResetDefaults();
     void TestExhaust();
+    void TestExhaustColor(const QString& aColor);
     void RunDiagnostics();
 
 signals:
@@ -535,7 +539,8 @@ private:
     int FanSpeedPercent = 70;
     int ExhaustLight1Channel = 0;
     int ExhaustLight2Channel = 1;
-    int PassiveLightsChannel = 2;
+    int ExhaustLight3Channel = 2;
+    int PassiveLightsChannel = 3;
     int TailLightsChannel = 13;
     int LeftTurnLightsChannel = 14;
     int RightTurnLightsChannel = 15;
@@ -544,7 +549,7 @@ private:
     int ServoOpenPulseUs = 512;
     bool bServoZeroed = false;
     QVector<int> ChannelRoles = {
-        1, 2, 3, 0, 0, 0, 0, 0,
+        1, 2, 10, 3, 0, 0, 0, 0,
         0, 0, 0, 0, 7, 4, 5, 6
     };
     bool bSettingsDirty = false;

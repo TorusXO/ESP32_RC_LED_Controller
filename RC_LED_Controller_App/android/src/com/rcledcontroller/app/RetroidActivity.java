@@ -1,12 +1,14 @@
-package com.spiralknightsinvoked.rcledcontroller;
+package com.rcledcontroller.app;
 
 import android.view.KeyEvent;
 import android.view.InputDevice;
 import android.view.KeyCharacterMap;
 import android.view.MotionEvent;
 import android.os.SystemClock;
+import android.os.Bundle;
 
 import org.qtproject.qt.android.bindings.QtActivity;
+import org.qtproject.qt.android.InlineKeyboard;
 
 /**
  * Qt's Android input bridge intentionally drops Android gamepad buttons.
@@ -16,6 +18,22 @@ import org.qtproject.qt.android.bindings.QtActivity;
 public class RetroidActivity extends QtActivity {
     private boolean leftStickUp;
     private boolean leftStickDown;
+    private InlineKeyboard inlineKeyboard;
+
+    @Override
+    public void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        inlineKeyboard = new InlineKeyboard(this);
+    }
+
+    @Override
+    public void onDestroy() {
+        if (inlineKeyboard != null) {
+            inlineKeyboard.dispose();
+            inlineKeyboard = null;
+        }
+        super.onDestroy();
+    }
 
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {

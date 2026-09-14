@@ -17,8 +17,9 @@ FocusScope {
 
     readonly property var roles: [
         "Unused",
-        "Exhaust light 1",
-        "Exhaust light 2",
+        "Exhaust red",
+        "Exhaust green",
+        "Exhaust blue",
         "Passive lights",
         "Tail lights",
         "Left turning lights",
@@ -26,6 +27,10 @@ FocusScope {
         "Headlight servo",
         "Cooling fans",
         "White reverse lights"
+    ]
+
+    readonly property var roleValues: [
+        0, 1, 2, 10, 3, 4, 5, 6, 7, 8, 9
     ]
 
     Timer {
@@ -196,6 +201,13 @@ FocusScope {
                                 roleBox.popup.open()
                             }
 
+                            function syncRoleFromController() {
+                                var roleIndex = root.roleValues.indexOf(
+                                    DeviceController.GetChannelRole(channelRow.index)
+                                )
+                                roleBox.currentIndex = Math.max(0, roleIndex)
+                            }
+
                             onActiveFocusChanged: {
                                 if (activeFocus) {
                                     channelList.positionViewAtIndex(
@@ -246,8 +258,13 @@ FocusScope {
                                     id: roleBox
                                     Layout.fillWidth: true
                                     model: root.roles
-                                    currentIndex: DeviceController.GetChannelRole(
-                                        channelRow.index
+                                    currentIndex: Math.max(
+                                        0,
+                                        root.roleValues.indexOf(
+                                            DeviceController.GetChannelRole(
+                                                channelRow.index
+                                            )
+                                        )
                                     )
                                     activeFocusOnTab: false
                                     focus: false
@@ -256,10 +273,18 @@ FocusScope {
                                     onActivated: {
                                         DeviceController.SetChannelRole(
                                             channelRow.index,
-                                            currentIndex
+                                            root.roleValues[currentIndex]
                                         )
                                         popup.close()
                                         channelRow.forceActiveFocus()
+                                    }
+
+                                    Connections {
+                                        target: DeviceController
+
+                                        function onConfigurationChanged() {
+                                            channelRow.syncRoleFromController()
+                                        }
                                     }
 
                                     function selectRole(aRole) {
@@ -270,7 +295,7 @@ FocusScope {
                                         currentIndex = role
                                         DeviceController.SetChannelRole(
                                             channelRow.index,
-                                            role
+                                            root.roleValues[role]
                                         )
                                     }
 
@@ -487,7 +512,7 @@ FocusScope {
                                                         roleList.currentIndex
                                                     DeviceController.SetChannelRole(
                                                         channelRow.index,
-                                                        roleList.currentIndex
+                                                        root.roleValues[roleList.currentIndex]
                                                     )
                                                     rolePopup.close()
                                                     channelRow.forceActiveFocus()

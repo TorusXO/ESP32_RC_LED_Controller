@@ -31,16 +31,18 @@ struct FControllerConfiguration
     // the same firmware can be reused with different wiring harnesses.
     uint8_t ExhaustLight1Channel = 0;
     uint8_t ExhaustLight2Channel = 1;
-    uint8_t PassiveLightsChannel = 2;
+    uint8_t ExhaustLight3Channel = 2;
+    uint8_t PassiveLightsChannel = 3;
     uint8_t TailLightsChannel = 13;
     uint8_t LeftTurnLightsChannel = 14;
     uint8_t RightTurnLightsChannel = 15;
     uint8_t HeadlightServoChannel = 12;
 
     // Role assigned to each PCA9685 channel. Multiple channels may share
-    // the same role; 0 means unused. Role 9 is white reverse lights.
+    // the same role; 0 means unused. Role 9 is white reverse lights and role
+    // 10 is the blue channel of the RGB exhaust diode.
     uint8_t ChannelRoles[16] = {
-        1, 2, 3, 0, 0, 0, 0, 0,
+        1, 2, 10, 3, 0, 0, 0, 0,
         0, 0, 0, 0, 7, 4, 5, 6
     };
 

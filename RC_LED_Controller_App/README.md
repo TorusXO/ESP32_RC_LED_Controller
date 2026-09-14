@@ -14,6 +14,8 @@ the two 960 × 540 landscape frames from the `RC LED Controller UI` Figma file.
 - Adjustable acceleration threshold, active brightness, dim brightness and fan
   speed.
 - Explicit save to ESP32 NVS, reset-to-defaults and exhaust-test commands.
+- Channel setup supports separate red, green and blue roles for a common-ground
+  RGB exhaust diode.
 
 ## Required Qt components
 
@@ -36,6 +38,36 @@ the two 960 × 540 landscape frames from the `RC LED Controller UI` Figma file.
 
 The application is locked to landscape orientation by
 `android/AndroidManifest.xml`.
+
+The Android application ID is `com.rcledcontroller.app`; its launcher activity
+is `com.rcledcontroller.app.RetroidActivity`. The Java source lives under
+`android/src/com/rcledcontroller/app/`. Qt uses `RCLEDController` as its
+settings organization, with a one-time import of accessible legacy settings.
+
+Changing the Android application ID creates a separate installed app, not an
+update to the previous package. Its private local settings and presets do not
+transfer automatically. Keep the old app until any needed setups are recovered.
+Use a fresh Android build directory after the rename so generated manifests
+and copied Java sources do not retain the former package.
+
+### Inline name entry on Android
+
+The board-name and saved-setup popups keep the text field inside the app while
+the system keyboard is open. `InlineKeyboard.java` requests Android's
+`IME_FLAG_NO_EXTRACT_UI` and `IME_FLAG_NO_FULLSCREEN` for Qt editors, preserving
+the existing input type and Done action. The popups sit near the top of the
+screen to leave room for the landscape keyboard; closing either popup hides
+the keyboard and returns focus to its add button.
+
+The small Java bridge accesses Qt 6.10's package-private `QtEditText` options,
+because these flags are not exposed by QML input-method hints. It does not
+modify the Qt installation. Recompile and recheck it when upgrading Qt.
+Keyboard apps ultimately decide whether to honor Android's IME flags.
+
+On-device regression check: open each name popup, type and delete text, use
+Done to submit or Cancel to discard, then reopen it and hide/show the keyboard.
+The keyboard should stay below the app's field, without a full-screen text
+editor. Also check using the Retroid controls with a hardware keyboard attached.
 
 ## Interaction model
 

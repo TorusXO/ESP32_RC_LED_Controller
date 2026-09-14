@@ -43,7 +43,8 @@ public:
     );
 
     void TriggerExhaustTest(
-        uint32_t aCurrentTimeMs
+        uint32_t aCurrentTimeMs,
+        uint8_t aRole = 0
     );
 
     // Debug-only direct PCA9685 servo output. This bypasses channel roles
@@ -105,10 +106,16 @@ private:
 
     void SetLedBrightness(
         uint8_t aChannel,
-        uint16_t aBrightness
+        uint16_t aBrightness,
+        bool aInvert = true
     );
 
     void SetRoleBrightness(
+        uint8_t aRole,
+        uint16_t aBrightness
+    );
+
+    void SetExhaustRoleBrightness(
         uint8_t aRole,
         uint16_t aBrightness
     );
@@ -135,7 +142,14 @@ private:
     uint16_t ServoTestPulse = 0;
 
     int16_t PreviousThrottlePercent = 0;
-    float PreviousFilteredForwardAccelerationG = 0.0f;
+    bool bExhaustInputValid = false;
+    bool bHighThrottleActive = false;
+    bool bAccelerationTriggerArmed = true;
+    uint8_t ExhaustTestRole = 0;
+    uint32_t ThrottleSampleTimeMs = 0;
+    uint32_t HighThrottleStartTimeMs = 0;
+    uint32_t ExhaustBurstSequence = 0;
+    uint32_t ExhaustBurstIntervalMs = 500;
 
     uint16_t CurrentRearBrightness = 0;
     uint16_t CurrentLeftTurnBrightness = 0;

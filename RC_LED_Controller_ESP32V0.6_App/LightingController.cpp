@@ -46,10 +46,10 @@ namespace
         100;
 
     static constexpr int16_t EXHAUST_MINIMUM_FORWARD_THROTTLE_PERCENT =
-        10;
+        35;
 
     static constexpr int16_t EXHAUST_THROTTLE_RISE_PERCENT =
-        18;
+        25;
 
     static constexpr uint32_t EXHAUST_THROTTLE_PULSE_DURATION_MS =
         70;
@@ -61,7 +61,12 @@ namespace
         180;
 
     static constexpr uint32_t EXHAUST_TRIGGER_COOLDOWN_MS =
-        140;
+        240;
+
+    static constexpr uint32_t EXHAUST_COLOR_TEST_DURATION_MS = 2000;
+    static constexpr uint32_t EXHAUST_THROTTLE_SAMPLE_MS = 100;
+    static constexpr int16_t EXHAUST_HIGH_THROTTLE_PERCENT = 65;
+    static constexpr int16_t EXHAUST_HIGH_THROTTLE_RELEASE_PERCENT = 55;
 
     Adafruit_PWMServoDriver PwmController(
         PCA9685_ADDRESS
@@ -92,7 +97,7 @@ bool FLightingController::Begin()
     bConnected = true;
 
     PwmController.setOutputMode(
-        false
+        true // Totem-pole outputs drive the common-ground RGB anodes high.
     );
 
     PwmController.setPWMFreq(
@@ -123,7 +128,12 @@ bool FLightingController::Begin()
         false;
 
     PreviousThrottlePercent = 0;
-    PreviousFilteredForwardAccelerationG = 0.0f;
+    bExhaustInputValid = false;
+    bHighThrottleActive = false;
+    bAccelerationTriggerArmed = true;
+    ExhaustTestRole = 0;
+    ExhaustBurstSequence = 0;
+    ExhaustBurstIntervalMs = 500;
 
     // Tail lights keep their dim running-light level independently of the
     // passive-light toggle. Role 3 is the only role controlled by that toggle.
@@ -138,8 +148,9 @@ bool FLightingController::Begin()
     CurrentRightTurnBrightness =
         LED_OFF_BRIGHTNESS;
 
-    SetRoleBrightness(1, LED_OFF_BRIGHTNESS);
-    SetRoleBrightness(2, LED_OFF_BRIGHTNESS);
+    SetExhaustRoleBrightness(1, LED_OFF_BRIGHTNESS);
+    SetExhaustRoleBrightness(2, LED_OFF_BRIGHTNESS);
+    SetExhaustRoleBrightness(10, LED_OFF_BRIGHTNESS);
     SetRoleBrightness(4, CurrentRearBrightness);
     SetRoleBrightness(5, CurrentLeftTurnBrightness);
     SetRoleBrightness(6, CurrentRightTurnBrightness);
@@ -238,15 +249,30 @@ void FLightingController::Update(
 }
 
 void FLightingController::TriggerExhaustTest(
-    uint32_t aCurrentTimeMs
+    uint32_t aCurrentTimeMs,
+    uint8_t aRole
 )
 {
+    if (aRole != 0 && aRole != 1 && aRole != 2 && aRole != 10 && aRole != 255)
+    {
+        return;
+    }
+    ExhaustTestRole = aRole;
+    if (aRole == 255)
+    {
+        bExhaustPulseActive = false;
+        bManualExhaustPulseActive = false;
+        ExhaustPulseDurationMs = 0;
+        LastExhaustTriggerTimeMs = aCurrentTimeMs;
+        ApplyExhaustOutputs(aCurrentTimeMs);
+        return;
+    }
     bManualExhaustPulseActive =
         true;
 
     TriggerExhaustPulse(
         aCurrentTimeMs,
-        EXHAUST_TEST_PULSE_DURATION_MS
+        aRole == 0 ? EXHAUST_TEST_PULSE_DURATION_MS : EXHAUST_COLOR_TEST_DURATION_MS
     );
 }
 
@@ -441,84 +467,97 @@ void FLightingController::UpdateExhaustState(
     uint32_t aCurrentTimeMs
 )
 {
-    if (
-        !Configuration.bExhaustEnabled &&
-        !bManualExhaustPulseActive
-    )
+    const int16_t Throttle = aInputStateRef.ThrottlePercent;
+    const float Acceleration = aInputStateRef.FilteredForwardAccelerationG;
+    // Manual tests own all three exhaust outputs until their timeout.
+    if (bManualExhaustPulseActive)
+    {
+        PreviousThrottlePercent = Throttle;
+        ThrottleSampleTimeMs = aCurrentTimeMs;
+        bExhaustInputValid = false;
+        bHighThrottleActive = false;
+        return;
+    }
+
+    if (!Configuration.bExhaustEnabled ||
+        !aInputStateRef.bThrottleHasSignal || Throttle < 0)
     {
         bExhaustPulseActive = false;
         ExhaustPulseDurationMs = 0;
-
-        PreviousThrottlePercent =
-            aInputStateRef.ThrottlePercent;
-
-        PreviousFilteredForwardAccelerationG =
-            aInputStateRef.FilteredForwardAccelerationG;
-
+        bExhaustInputValid = false;
+        bHighThrottleActive = false;
+        bAccelerationTriggerArmed = true;
         return;
     }
 
-    if (
-        !aInputStateRef.bThrottleHasSignal ||
-        aInputStateRef.ThrottlePercent <= 0
-    )
+    // Seed the sample on connection/reconnection: signal acquisition is not a blip.
+    if (!bExhaustInputValid)
     {
-        PreviousThrottlePercent =
-            aInputStateRef.ThrottlePercent;
-
-        PreviousFilteredForwardAccelerationG =
-            aInputStateRef.FilteredForwardAccelerationG;
-
-        return;
+        PreviousThrottlePercent = Throttle;
+        ThrottleSampleTimeMs = aCurrentTimeMs;
+        bExhaustInputValid = true;
+        bAccelerationTriggerArmed = Acceleration < Configuration.ExhaustTriggerThresholdG;
     }
 
-    const int16_t ThrottleRisePercent =
-        aInputStateRef.ThrottlePercent -
-        PreviousThrottlePercent;
+    const uint32_t SampleElapsed = aCurrentTimeMs - ThrottleSampleTimeMs;
+    const int16_t ThrottleChange = Throttle - PreviousThrottlePercent;
+    const bool bRecentSample = SampleElapsed <= 200;
+    const bool bRapidRise = bRecentSample &&
+        Throttle >= EXHAUST_MINIMUM_FORWARD_THROTTLE_PERCENT &&
+        ThrottleChange >= EXHAUST_THROTTLE_RISE_PERCENT;
+    const bool bLiftOff = bRecentSample &&
+        PreviousThrottlePercent >= EXHAUST_HIGH_THROTTLE_PERCENT &&
+        ThrottleChange <= -30;
+
+    if (!bHighThrottleActive && Throttle >= EXHAUST_HIGH_THROTTLE_PERCENT)
+    {
+        bHighThrottleActive = true;
+        HighThrottleStartTimeMs = aCurrentTimeMs;
+    }
+    else if (Throttle < EXHAUST_HIGH_THROTTLE_RELEASE_PERCENT)
+    {
+        bHighThrottleActive = false;
+    }
+
+    const bool bAccelerationAvailable = Configuration.bAccelerometerExhaustEnabled &&
+        aInputStateRef.bAccelerometerHasSample;
+    if (!bAccelerationAvailable || Acceleration < Configuration.ExhaustTriggerThresholdG * 0.6f)
+    {
+        bAccelerationTriggerArmed = true;
+    }
+    const bool bAccelerationSpike = bAccelerationAvailable &&
+        bAccelerationTriggerArmed && Acceleration >= Configuration.ExhaustTriggerThresholdG;
+    if (bAccelerationSpike)
+    {
+        bAccelerationTriggerArmed = false;
+    }
 
     const bool bCooldownComplete =
-        aCurrentTimeMs -
-        LastExhaustTriggerTimeMs >=
-        EXHAUST_TRIGGER_COOLDOWN_MS;
+        aCurrentTimeMs - LastExhaustTriggerTimeMs >= EXHAUST_TRIGGER_COOLDOWN_MS;
+    const bool bHighThrottleBurst = bHighThrottleActive &&
+        aCurrentTimeMs - HighThrottleStartTimeMs >= 250 &&
+        aCurrentTimeMs - LastExhaustTriggerTimeMs >= ExhaustBurstIntervalMs;
 
-    const bool bRapidThrottleRise =
-        aInputStateRef.ThrottlePercent >=
-        EXHAUST_MINIMUM_FORWARD_THROTTLE_PERCENT &&
-        ThrottleRisePercent >=
-        EXHAUST_THROTTLE_RISE_PERCENT;
-
-    const bool bAccelerationThresholdCrossed =
-        Configuration.bAccelerometerExhaustEnabled &&
-        aInputStateRef.bAccelerometerHasSample &&
-        aInputStateRef.FilteredForwardAccelerationG >=
-        Configuration.ExhaustTriggerThresholdG &&
-        PreviousFilteredForwardAccelerationG <
-        Configuration.ExhaustTriggerThresholdG;
-
-    if (bCooldownComplete && bRapidThrottleRise)
+    if (!bExhaustPulseActive && bCooldownComplete &&
+        (bRapidRise || bLiftOff || (Throttle >= 40 && bAccelerationSpike) || bHighThrottleBurst))
     {
-        TriggerExhaustPulse(
-            aCurrentTimeMs,
-            EXHAUST_THROTTLE_PULSE_DURATION_MS
-        );
+        ++ExhaustBurstSequence;
+        // Vary the gaps and pulse lengths; leave a clear dark interval between pops.
+        ExhaustBurstIntervalMs = 420 + (ExhaustBurstSequence * 137U) % 430U;
+        uint32_t Duration = EXHAUST_THROTTLE_PULSE_DURATION_MS;
+        if (bLiftOff || bAccelerationSpike)
+            Duration = EXHAUST_ACCELERATION_PULSE_DURATION_MS;
+        if (bHighThrottleBurst)
+            Duration = 60 + (ExhaustBurstSequence * 23U) % 70U;
+        TriggerExhaustPulse(aCurrentTimeMs, Duration);
     }
 
-    if (
-        bCooldownComplete &&
-        bAccelerationThresholdCrossed
-    )
+    // Compare over a short time window, rather than a single loop iteration.
+    if (SampleElapsed >= EXHAUST_THROTTLE_SAMPLE_MS || bRapidRise || bLiftOff)
     {
-        TriggerExhaustPulse(
-            aCurrentTimeMs,
-            EXHAUST_ACCELERATION_PULSE_DURATION_MS
-        );
+        PreviousThrottlePercent = Throttle;
+        ThrottleSampleTimeMs = aCurrentTimeMs;
     }
-
-    PreviousThrottlePercent =
-        aInputStateRef.ThrottlePercent;
-
-    PreviousFilteredForwardAccelerationG =
-        aInputStateRef.FilteredForwardAccelerationG;
 }
 
 void FLightingController::TriggerExhaustPulse(
@@ -712,8 +751,9 @@ void FLightingController::ApplyExhaustOutputs(
 {
     if (!bExhaustPulseActive)
     {
-        SetRoleBrightness(1, LED_OFF_BRIGHTNESS);
-        SetRoleBrightness(2, LED_OFF_BRIGHTNESS);
+        SetExhaustRoleBrightness(1, LED_OFF_BRIGHTNESS);
+        SetExhaustRoleBrightness(2, LED_OFF_BRIGHTNESS);
+        SetExhaustRoleBrightness(10, LED_OFF_BRIGHTNESS);
 
         return;
     }
@@ -732,8 +772,9 @@ void FLightingController::ApplyExhaustOutputs(
         bManualExhaustPulseActive = false;
         ExhaustPulseDurationMs = 0;
 
-        SetRoleBrightness(1, LED_OFF_BRIGHTNESS);
-        SetRoleBrightness(2, LED_OFF_BRIGHTNESS);
+        SetExhaustRoleBrightness(1, LED_OFF_BRIGHTNESS);
+        SetExhaustRoleBrightness(2, LED_OFF_BRIGHTNESS);
+        SetExhaustRoleBrightness(10, LED_OFF_BRIGHTNESS);
 
         return;
     }
@@ -743,11 +784,19 @@ void FLightingController::ApplyExhaustOutputs(
             Configuration.ActiveBrightnessPercent
         );
 
+    if (bManualExhaustPulseActive && ExhaustTestRole != 0)
+    {
+        SetExhaustRoleBrightness(1, ExhaustTestRole == 1 ? LED_FULL_BRIGHTNESS : 0);
+        SetExhaustRoleBrightness(2, ExhaustTestRole == 2 ? LED_FULL_BRIGHTNESS : 0);
+        SetExhaustRoleBrightness(10, ExhaustTestRole == 10 ? LED_FULL_BRIGHTNESS : 0);
+        return;
+    }
+
     const uint32_t RemainingTimeMs =
         ExhaustPulseDurationMs -
         PulseElapsedTimeMs;
 
-    const uint16_t YellowBrightness =
+    const uint16_t RedGreenBrightness =
         static_cast<uint16_t>(
             (
                 static_cast<uint32_t>(
@@ -787,8 +836,11 @@ void FLightingController::ApplyExhaustOutputs(
             );
     }
 
-    SetRoleBrightness(1, YellowBrightness);
-    SetRoleBrightness(2, BlueBrightness);
+    // Blue ignition, then a warm orange/red tail. Avoid an equal RGB white flash.
+    const bool bIgnition = PulseElapsedTimeMs < BluePhaseDurationMs;
+    SetExhaustRoleBrightness(1, bIgnition ? RedGreenBrightness / 5 : RedGreenBrightness);
+    SetExhaustRoleBrightness(2, bIgnition ? 0 : RedGreenBrightness / 4);
+    SetExhaustRoleBrightness(10, BlueBrightness);
 }
 
 uint16_t FLightingController::MoveBrightnessTowardsTarget(
@@ -909,7 +961,8 @@ uint16_t FLightingController::ConvertPercentToBrightness(
 
 void FLightingController::SetLedBrightness(
     uint8_t aChannel,
-    uint16_t aBrightness
+    uint16_t aBrightness,
+    bool aInvert
 )
 {
     if (aChannel >= 16)
@@ -926,7 +979,7 @@ void FLightingController::SetLedBrightness(
     PwmController.setPin(
         aChannel,
         aBrightness,
-        true
+        aInvert
     );
 }
 
@@ -940,6 +993,22 @@ void FLightingController::SetRoleBrightness(
         if (Configuration.ChannelRoles[Channel] == aRole)
         {
             SetLedBrightness(Channel, aBrightness);
+        }
+    }
+}
+
+void FLightingController::SetExhaustRoleBrightness(
+    uint8_t aRole,
+    uint16_t aBrightness
+)
+{
+    for (uint8_t Channel = 0; Channel < 16; ++Channel)
+    {
+        if (Configuration.ChannelRoles[Channel] == aRole)
+        {
+            // The RGB diode is common-cathode (common ground), so its anodes
+            // are driven with non-inverted PWM.
+            SetLedBrightness(Channel, aBrightness, false);
         }
     }
 }

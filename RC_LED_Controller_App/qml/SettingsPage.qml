@@ -13,11 +13,11 @@ FocusScope {
 
     property int activeCategory: 0
     property string saveFeedback: ""
-    property string profileNameInput: ""
     readonly property var settingsRoles: [
         "Unused",
-        "Exhaust light 1",
-        "Exhaust light 2",
+        "Exhaust red",
+        "Exhaust green",
+        "Exhaust blue",
         "Passive lights",
         "Tail lights",
         "Left turning lights",
@@ -25,6 +25,9 @@ FocusScope {
         "Headlight servo",
         "Cooling fans",
         "White reverse lights"
+    ]
+    readonly property var settingsRoleValues: [
+        0, 1, 2, 10, 3, 4, 5, 6, 7, 8, 9
     ]
 
     signal goBack()
@@ -116,7 +119,7 @@ FocusScope {
         } else if (root.activeCategory === 6) {
             diagnosticsButton.forceActiveFocus()
         } else if (root.activeCategory === 7) {
-            profileNameField.forceActiveFocus()
+            addProfileButton.forceActiveFocus()
         } else {
             livePanel.forceActiveFocus()
         }
@@ -247,6 +250,31 @@ FocusScope {
                    event.key === Qt.Key_Backspace) {
             root.handleBack()
             event.accepted = true
+        }
+    }
+
+    Connections {
+        target: DeviceController
+
+        function onConfigurationChanged() {
+            triggerThresholdPanel.slider.value = DeviceController.triggerThresholdG
+            brightnessRow.slider.value = DeviceController.activeBrightnessPercent
+            dimBrightnessRow.slider.value = DeviceController.dimBrightnessPercent
+            fanSpeedRow.slider.value = DeviceController.fanSpeedPercent
+            servoClosedSlider.slider.value = DeviceController.servoClosedPulseUs
+            servoOpenSlider.slider.value = DeviceController.servoOpenPulseUs
+            gyroForwardAxisSelector.currentIndex = DeviceController.accelerometerForwardAxis
+            gyroForwardDirectionSelector.currentIndex = DeviceController.accelerometerForwardInverted
+                ? 1
+                : 0
+            gyroToleranceRow.slider.value = DeviceController.accelerometerToleranceG
+
+            for (var channel = 0; channel < settingsChannelList.count; ++channel) {
+                var channelRow = settingsChannelList.itemAtIndex(channel)
+                if (channelRow && channelRow.syncRoleFromController) {
+                    channelRow.syncRoleFromController()
+                }
+            }
         }
     }
 
@@ -404,7 +432,7 @@ FocusScope {
                             label: "Vehicle profiles"
                             KeyNavigation.left: diagnosticsTab
                             KeyNavigation.right: accelerometerTab
-                            KeyNavigation.down: profileNameField
+                            KeyNavigation.down: addProfileButton
                             onActivated: root.activateCategory(category)
                         }
 
@@ -463,10 +491,10 @@ FocusScope {
                             Layout.fillWidth: true
                             checked: DeviceController.accelerometerEnabled
                             title: "Exhaust accelerometer"
-                            subtitle: "Flash exhaust LEDs when acceleration exceeds the threshold"
+                            subtitle: "Add acceleration-triggered pops above 40% forward throttle"
                             KeyNavigation.up: null
-                            KeyNavigation.down: thresholdSlider
-                            KeyNavigation.right: thresholdSlider
+                            KeyNavigation.down: triggerThresholdPanel.slider
+                            KeyNavigation.right: triggerThresholdPanel.slider
 
                             onToggled: function(checked) {
                                 DeviceController.SetPendingAccelerometerEnabled(checked)
@@ -636,9 +664,99 @@ FocusScope {
                                 id: testExhaustButton
                                 text: "Test exhaust"
                                 enabled: DeviceController.connected
-                                KeyNavigation.up: thresholdSlider
-                                KeyNavigation.right: brightnessRow.slider
+                                KeyNavigation.up: triggerThresholdPanel.slider
+                                KeyNavigation.down: testRedButton
+                                KeyNavigation.right: testRedButton
                                 onClicked: DeviceController.TestExhaust()
+                            }
+                        }
+
+                        Rectangle {
+                            Layout.fillWidth: true
+                            implicitHeight: rgbTestContent.implicitHeight + 28
+                            color: Theme.surface
+                            radius: 12
+
+                            ColumnLayout {
+                                id: rgbTestContent
+                                anchors.fill: parent
+                                anchors.margins: 14
+                                spacing: 12
+
+                                Text {
+                                    text: "RGB channel test"
+                                    color: Theme.textPrimary
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 14
+                                    font.weight: Font.Medium
+                                }
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: "Light one color for 2 seconds. Uses the channel roles saved on the ESP32; save changed assignments before testing."
+                                    color: Theme.textSecondary
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 10
+                                    wrapMode: Text.WordWrap
+                                }
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 10
+
+                                    ActionButton {
+                                        id: testRedButton
+                                        text: "Red only"
+                                        Layout.fillWidth: true
+                                        enabled: DeviceController.connected
+                                        KeyNavigation.up: testExhaustButton
+                                        KeyNavigation.down: testGreenButton
+                                        KeyNavigation.right: testGreenButton
+                                        onActiveFocusChanged: if (activeFocus) root.revealExhaustTest(this)
+                                        onClicked: DeviceController.TestExhaustColor("R")
+                                    }
+                                    ActionButton {
+                                        id: testGreenButton
+                                        text: "Green only"
+                                        Layout.fillWidth: true
+                                        enabled: DeviceController.connected
+                                        KeyNavigation.up: testRedButton
+                                        KeyNavigation.down: testBlueButton
+                                        KeyNavigation.left: testRedButton
+                                        KeyNavigation.right: testBlueButton
+                                        onActiveFocusChanged: if (activeFocus) root.revealExhaustTest(this)
+                                        onClicked: DeviceController.TestExhaustColor("G")
+                                    }
+                                    ActionButton {
+                                        id: testBlueButton
+                                        text: "Blue only"
+                                        Layout.fillWidth: true
+                                        enabled: DeviceController.connected
+                                        KeyNavigation.up: testGreenButton
+                                        KeyNavigation.down: stopExhaustTestButton
+                                        KeyNavigation.left: testGreenButton
+                                        KeyNavigation.right: stopExhaustTestButton
+                                        onActiveFocusChanged: if (activeFocus) root.revealExhaustTest(this)
+                                        onClicked: DeviceController.TestExhaustColor("B")
+                                    }
+                                    ActionButton {
+                                        id: stopExhaustTestButton
+                                        text: "Stop test"
+                                        Layout.fillWidth: true
+                                        enabled: DeviceController.connected
+                                        KeyNavigation.up: testBlueButton
+                                        KeyNavigation.down: saveSettingsButton
+                                        KeyNavigation.left: testBlueButton
+                                        onActiveFocusChanged: if (activeFocus) root.revealExhaustTest(this)
+                                        onClicked: DeviceController.TestExhaustColor("OFF")
+                                    }
+                                }
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: "Driving effect: spaced blue/orange pops at high throttle, short bursts on sharp blips or lift-off. Low, steady throttle stays dark."
+                                    color: Theme.textSecondary
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 10
+                                    wrapMode: Text.WordWrap
+                                }
                             }
                         }
                     }
@@ -843,6 +961,13 @@ FocusScope {
                                     roleBox.popup.open()
                                 }
 
+                                function syncRoleFromController() {
+                                    var roleIndex = root.settingsRoleValues.indexOf(
+                                        DeviceController.GetChannelRole(settingsChannelRow.index)
+                                    )
+                                    roleBox.currentIndex = Math.max(0, roleIndex)
+                                }
+
                                 Keys.onPressed: function(event) {
                                     if (event.key === Qt.Key_Up) {
                                         root.focusChannel(index - 1)
@@ -883,8 +1008,13 @@ FocusScope {
                                         id: roleBox
                                         Layout.fillWidth: true
                                         model: root.settingsRoles
-                                        currentIndex: DeviceController.GetChannelRole(
-                                            settingsChannelRow.index
+                                        currentIndex: Math.max(
+                                            0,
+                                            root.settingsRoleValues.indexOf(
+                                                DeviceController.GetChannelRole(
+                                                    settingsChannelRow.index
+                                                )
+                                            )
                                         )
                                         activeFocusOnTab: false
                                         focus: false
@@ -893,10 +1023,18 @@ FocusScope {
                                         onActivated: {
                                             DeviceController.SetChannelRole(
                                                 settingsChannelRow.index,
-                                                currentIndex
+                                                root.settingsRoleValues[currentIndex]
                                             )
                                             popup.close()
                                             settingsChannelRow.forceActiveFocus()
+                                        }
+
+                                        Connections {
+                                            target: DeviceController
+
+                                            function onConfigurationChanged() {
+                                                settingsChannelRow.syncRoleFromController()
+                                            }
                                         }
 
                                                  Keys.onPressed: function(event) {
@@ -1090,7 +1228,7 @@ FocusScope {
                                                         roleBox.currentIndex = roleList.currentIndex
                                                         DeviceController.SetChannelRole(
                                                             settingsChannelRow.index,
-                                                            roleList.currentIndex
+                                                            root.settingsRoleValues[roleList.currentIndex]
                                                         )
                                                         settingsRolePopup.close()
                                                         event.accepted = true
@@ -1653,20 +1791,41 @@ FocusScope {
                         width: profilesFlickable.contentWidth
                         spacing: 14
 
-                        Column {
+                        ColumnLayout {
                             Layout.fillWidth: true
-                            Layout.preferredHeight: 38
+                            Layout.leftMargin: 14
+                            Layout.rightMargin: 14
                             spacing: 4
 
-                            Text {
-                                text: "Vehicle profiles"
-                                color: Theme.textPrimary
-                                font.family: Theme.fontFamily
-                                font.pixelSize: 17
-                                font.weight: Font.DemiBold
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: 10
+
+                                ActionButton {
+                                    id: addProfileButton
+                                    text: "+"
+                                    Layout.preferredWidth: 36
+                                    Layout.preferredHeight: 34
+                                    Accessible.name: "Add saved setup"
+                                    KeyNavigation.up: profilesTab
+                                    KeyNavigation.down: addBoardButton
+                                    onClicked: root.openNewProfilePopup()
+                                }
+
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: "Vehicle profiles"
+                                    color: Theme.textPrimary
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 17
+                                    font.weight: Font.DemiBold
+                                    elide: Text.ElideRight
+                                }
                             }
 
                             Text {
+                                Layout.fillWidth: true
+                                Layout.leftMargin: 46
                                 text: "Keep a named setup for each body and match it to the connected ESP32"
                                 color: Theme.textSecondary
                                 font.family: Theme.fontFamily
@@ -1677,27 +1836,45 @@ FocusScope {
 
                         Rectangle {
                             Layout.fillWidth: true
-                            Layout.preferredHeight: 94
+                            implicitHeight: connectedBoardContent.implicitHeight + 28
                             color: Theme.surface
                             radius: 12
 
                             ColumnLayout {
+                                id: connectedBoardContent
                                 anchors.fill: parent
                                 anchors.margins: 14
                                 spacing: 6
 
-                                Text {
+                                RowLayout {
                                     Layout.fillWidth: true
-                                    text: "Connected board: " + DeviceController.boardName
-                                    color: Theme.textPrimary
-                                    font.family: Theme.fontFamily
-                                    font.pixelSize: 12
-                                    font.weight: Font.Medium
-                                    elide: Text.ElideRight
+                                    spacing: 10
+
+                                    ActionButton {
+                                        id: addBoardButton
+                                        text: "+"
+                                        Layout.preferredWidth: 36
+                                        Layout.preferredHeight: 34
+                                        Accessible.name: "Name connected board"
+                                        KeyNavigation.up: addProfileButton
+                                        KeyNavigation.down: profileList
+                                        onClicked: root.openBoardNamePopup()
+                                    }
+
+                                    Text {
+                                        Layout.fillWidth: true
+                                        text: "Connected board: " + DeviceController.boardName
+                                        color: Theme.textPrimary
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: 17
+                                        font.weight: Font.DemiBold
+                                        elide: Text.ElideRight
+                                    }
                                 }
 
                                 Text {
                                     Layout.fillWidth: true
+                                    Layout.leftMargin: 46
                                     text: "ESP32 ID: " + DeviceController.boardId
                                     color: Theme.textSecondary
                                     font.family: Theme.fontFamily
@@ -1707,9 +1884,24 @@ FocusScope {
 
                                 Text {
                                     Layout.fillWidth: true
+                                    Layout.leftMargin: 46
+                                    text: DeviceController.activeProfileName !== ""
+                                        ? "Active preset: " + DeviceController.activeProfileName
+                                        : "Active preset: None"
+                                    color: DeviceController.activeProfileName !== ""
+                                        ? Theme.green
+                                        : Theme.textSecondary
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 10
+                                    elide: Text.ElideRight
+                                }
+
+                                Text {
+                                    Layout.fillWidth: true
+                                    Layout.leftMargin: 46
                                     text: DeviceController.matchingProfileName !== ""
-                                        ? "Matching preset: " + DeviceController.matchingProfileName
-                                        : "No preset is assigned to this ESP32 yet"
+                                        ? "Matching setup: " + DeviceController.matchingProfileName
+                                        : "No saved setup is assigned to this ESP32 yet"
                                     color: DeviceController.matchingProfileName !== ""
                                         ? Theme.green
                                         : Theme.textSecondary
@@ -1720,54 +1912,13 @@ FocusScope {
                             }
                         }
 
-                        RowLayout {
+                        Text {
                             Layout.fillWidth: true
-                            spacing: 10
-
-                            TextField {
-                                id: boardNameField
-                                Layout.fillWidth: true
-                                placeholderText: "Body name, for example: Supra white"
-                                text: DeviceController.boardName
-                                selectByMouse: true
-                                KeyNavigation.up: profilesTab
-                                KeyNavigation.down: profileNameField
-                                onEditingFinished: DeviceController.SetBoardName(text)
-                            }
-
-                            ActionButton {
-                                id: setBoardNameButton
-                                text: "Set board name"
-                                KeyNavigation.up: profilesTab
-                                KeyNavigation.down: profileNameField
-                                onClicked: DeviceController.SetBoardName(boardNameField.text)
-                            }
-                        }
-
-                        RowLayout {
-                            Layout.fillWidth: true
-                            spacing: 10
-
-                            TextField {
-                                id: profileNameField
-                                Layout.fillWidth: true
-                                placeholderText: "New preset name"
-                                text: root.profileNameInput
-                                selectByMouse: true
-                                KeyNavigation.up: boardNameField
-                                KeyNavigation.down: profileList
-                                onTextChanged: root.profileNameInput = text
-                            }
-
-                            ActionButton {
-                                id: saveProfileButton
-                                text: "Save preset"
-                                primary: true
-                                enabled: profileNameField.text.trim() !== ""
-                                KeyNavigation.up: boardNameField
-                                KeyNavigation.down: profileList
-                                onClicked: DeviceController.SaveProfile(profileNameField.text)
-                            }
+                            text: "Use + to add a saved setup. Select one and press A or Load selected to apply it locally; use Save to ESP32 below to update the connected board."
+                            color: Theme.textSecondary
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 10
+                            wrapMode: Text.WordWrap
                         }
 
                         ListView {
@@ -1781,33 +1932,67 @@ FocusScope {
                             focus: false
                             activeFocusOnTab: true
                             model: DeviceController.profileNames
-                            currentIndex: DeviceController.profileNames.length > 0 ? 0 : -1
-                            KeyNavigation.up: profileNameField
+                            currentIndex: {
+                                var activeIndex = DeviceController.profileNames.indexOf(
+                                    DeviceController.activeProfileName
+                                )
+                                return activeIndex >= 0
+                                    ? activeIndex
+                                    : (DeviceController.profileNames.length > 0 ? 0 : -1)
+                            }
+                            KeyNavigation.up: addBoardButton
                             KeyNavigation.down: loadProfileButton
+
+                            Keys.onPressed: function(event) {
+                                if (event.key === Qt.Key_Return ||
+                                    event.key === Qt.Key_Enter ||
+                                    event.key === Qt.Key_Space) {
+                                    root.loadSelectedProfile()
+                                    event.accepted = true
+                                }
+                            }
 
                             delegate: Rectangle {
                                 required property string modelData
                                 required property int index
+                                property bool isActiveProfile:
+                                    DeviceController.activeProfileName !== "" &&
+                                    DeviceController.activeProfileName === modelData
 
                                 width: profileList.width
                                 height: 36
                                 radius: 8
-                                color: profileList.currentIndex === index
+                                color: isActiveProfile || profileList.currentIndex === index
                                     ? Theme.accentMuted
                                     : Theme.surface
-                                border.width: profileList.currentIndex === index ? 2 : 1
-                                border.color: profileList.currentIndex === index
+                                border.width: isActiveProfile || profileList.currentIndex === index ? 2 : 1
+                                border.color: isActiveProfile
+                                    ? Theme.green
+                                    : profileList.currentIndex === index
                                     ? Theme.accent
                                     : Theme.border
 
                                 Text {
                                     anchors.fill: parent
                                     anchors.leftMargin: 12
+                                    anchors.rightMargin: 72
                                     text: parent.modelData
                                     color: Theme.textPrimary
                                     font.family: Theme.fontFamily
                                     font.pixelSize: 11
                                     verticalAlignment: Text.AlignVCenter
+                                }
+
+                                Text {
+                                    visible: parent.isActiveProfile
+                                    anchors.right: parent.right
+                                    anchors.rightMargin: 12
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: "ACTIVE"
+                                    color: Theme.green
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 9
+                                    font.weight: Font.DemiBold
                                 }
 
                                 TapHandler {
@@ -1829,9 +2014,7 @@ FocusScope {
                                 enabled: profileList.currentIndex >= 0
                                 KeyNavigation.up: profileList
                                 KeyNavigation.down: loadMatchingProfileButton
-                                onClicked: DeviceController.LoadProfile(
-                                    DeviceController.profileNames[profileList.currentIndex]
-                                )
+                                onClicked: root.loadSelectedProfile()
                             }
 
                             ActionButton {
@@ -1855,14 +2038,6 @@ FocusScope {
                             }
                         }
 
-                        Text {
-                            Layout.fillWidth: true
-                            text: "Loading a preset changes the app locally. Press Save settings to upload it to the connected ESP32."
-                            color: Theme.textSecondary
-                            font.family: Theme.fontFamily
-                            font.pixelSize: 10
-                            wrapMode: Text.WordWrap
-                        }
                     }
                 }
             }
@@ -1899,7 +2074,9 @@ FocusScope {
             Item { Layout.fillWidth: true }
 
             Text {
-                text: "A Select   B Back   Y Save   X Restore defaults"
+                text: DeviceController.connected
+                    ? "A Select   B Back   Y Save to ESP32   X Restore defaults"
+                    : "A Select   B Back   Y Save locally   X Restore defaults"
                 color: Theme.textSecondary
                 font.family: Theme.fontFamily
                 font.pixelSize: 10
@@ -1931,7 +2108,9 @@ FocusScope {
 
             ActionButton {
                 id: saveSettingsButton
-                text: "Save settings"
+                text: DeviceController.connected
+                    ? "Save to ESP32"
+                    : "Save locally"
                 controllerKey: Qt.Key_Y
                 primary: true
                 KeyNavigation.left: resetDefaultsButton
@@ -1952,6 +2131,258 @@ FocusScope {
                                             : deleteProfileButton
                 enabled: DeviceController.settingsDirty
                 onClicked: DeviceController.SaveSettings()
+            }
+        }
+    }
+
+    function revealExhaustTest(control) {
+        var bottom = control.mapToItem(accelerometerContent, 0, control.height).y + 14
+        if (bottom > accelerometerFlickable.contentY + accelerometerFlickable.height) {
+            accelerometerFlickable.contentY = Math.min(
+                Math.max(0, accelerometerFlickable.contentHeight - accelerometerFlickable.height),
+                bottom - accelerometerFlickable.height
+            )
+        }
+    }
+
+    function openNewProfilePopup() {
+        newProfileNameField.text = ""
+        newProfilePopup.open()
+    }
+
+    function openBoardNamePopup() {
+        boardNamePopupField.text = DeviceController.boardName === "Unassigned body"
+            ? ""
+            : DeviceController.boardName
+        boardNamePopup.open()
+    }
+
+    function saveBoardName() {
+        var boardName = boardNamePopupField.text.trim()
+        if (boardName === "") {
+            return
+        }
+
+        DeviceController.SetBoardName(boardName)
+        boardNamePopup.close()
+    }
+
+    function loadSelectedProfile() {
+        if (profileList.currentIndex < 0) {
+            return
+        }
+
+        DeviceController.LoadProfile(
+            DeviceController.profileNames[profileList.currentIndex]
+        )
+    }
+
+    function createNewProfile() {
+        var profileName = newProfileNameField.text.trim()
+        if (profileName === "") {
+            return
+        }
+
+        DeviceController.SaveProfile(profileName)
+        newProfilePopup.close()
+    }
+
+    Popup {
+        id: newProfilePopup
+        parent: Overlay.overlay
+        width: Math.min(520, parent.width - 24)
+        height: 236
+        x: (parent.width - width) / 2
+        y: 12
+        modal: true
+        focus: true
+        padding: 0
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+
+        onOpened: Qt.callLater(function() {
+            newProfileNameField.forceActiveFocus()
+        })
+        onClosed: {
+            Qt.inputMethod.hide()
+            addProfileButton.forceActiveFocus()
+        }
+
+        Keys.onPressed: function(event) {
+            if (event.key === Qt.Key_Return ||
+                event.key === Qt.Key_Enter) {
+                root.createNewProfile()
+                event.accepted = true
+            } else if (event.key === Qt.Key_Back ||
+                       event.key === Qt.Key_Escape) {
+                newProfilePopup.close()
+                event.accepted = true
+            }
+        }
+
+        Overlay.modal: Rectangle {
+            color: "#99000000"
+        }
+
+        background: Card {
+            radius: 16
+        }
+
+        contentItem: ColumnLayout {
+            anchors.fill: parent
+            anchors.margins: 20
+            spacing: 12
+
+            Text {
+                Layout.fillWidth: true
+                text: "Add saved setup"
+                color: Theme.textPrimary
+                font.family: Theme.fontFamily
+                font.pixelSize: 19
+                font.weight: Font.DemiBold
+            }
+
+            Text {
+                Layout.fillWidth: true
+                text: "Give this vehicle body setup a name. It will be stored locally with the current settings."
+                color: Theme.textSecondary
+                font.family: Theme.fontFamily
+                font.pixelSize: 11
+                wrapMode: Text.WordWrap
+            }
+
+            TextField {
+                id: newProfileNameField
+                Layout.fillWidth: true
+                placeholderText: "Setup name, for example: Supra white"
+                selectByMouse: true
+                EnterKey.type: Qt.EnterKeyDone
+                onAccepted: root.createNewProfile()
+                KeyNavigation.down: cancelNewProfileButton
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 10
+
+                Item { Layout.fillWidth: true }
+
+                ActionButton {
+                    id: cancelNewProfileButton
+                    text: "Cancel"
+                    KeyNavigation.up: newProfileNameField
+                    KeyNavigation.right: createNewProfileButton
+                    onClicked: newProfilePopup.close()
+                }
+
+                ActionButton {
+                    id: createNewProfileButton
+                    text: "Create setup"
+                    primary: true
+                    enabled: newProfileNameField.text.trim() !== ""
+                    KeyNavigation.up: newProfileNameField
+                    KeyNavigation.left: cancelNewProfileButton
+                    onClicked: root.createNewProfile()
+                }
+            }
+        }
+    }
+
+    Popup {
+        id: boardNamePopup
+        parent: Overlay.overlay
+        width: Math.min(520, parent.width - 24)
+        height: 236
+        x: (parent.width - width) / 2
+        y: 12
+        modal: true
+        focus: true
+        padding: 0
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+
+        onOpened: Qt.callLater(function() {
+            boardNamePopupField.forceActiveFocus()
+        })
+        onClosed: {
+            Qt.inputMethod.hide()
+            addBoardButton.forceActiveFocus()
+        }
+
+        Keys.onPressed: function(event) {
+            if (event.key === Qt.Key_Return ||
+                event.key === Qt.Key_Enter) {
+                root.saveBoardName()
+                event.accepted = true
+            } else if (event.key === Qt.Key_Back ||
+                       event.key === Qt.Key_Escape) {
+                boardNamePopup.close()
+                event.accepted = true
+            }
+        }
+
+        Overlay.modal: Rectangle {
+            color: "#99000000"
+        }
+
+        background: Card {
+            radius: 16
+        }
+
+        contentItem: ColumnLayout {
+            anchors.fill: parent
+            anchors.margins: 20
+            spacing: 12
+
+            Text {
+                Layout.fillWidth: true
+                text: "Name connected board"
+                color: Theme.textPrimary
+                font.family: Theme.fontFamily
+                font.pixelSize: 19
+                font.weight: Font.DemiBold
+            }
+
+            Text {
+                Layout.fillWidth: true
+                text: "Give this ESP32 a body name so it is easy to recognize and match with a saved setup."
+                color: Theme.textSecondary
+                font.family: Theme.fontFamily
+                font.pixelSize: 11
+                wrapMode: Text.WordWrap
+            }
+
+            TextField {
+                id: boardNamePopupField
+                Layout.fillWidth: true
+                placeholderText: "Body name, for example: Supra white"
+                selectByMouse: true
+                EnterKey.type: Qt.EnterKeyDone
+                onAccepted: root.saveBoardName()
+                KeyNavigation.down: cancelBoardNameButton
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 10
+
+                Item { Layout.fillWidth: true }
+
+                ActionButton {
+                    id: cancelBoardNameButton
+                    text: "Cancel"
+                    KeyNavigation.up: boardNamePopupField
+                    KeyNavigation.right: applyBoardNameButton
+                    onClicked: boardNamePopup.close()
+                }
+
+                ActionButton {
+                    id: applyBoardNameButton
+                    text: "Apply name"
+                    primary: true
+                    enabled: boardNamePopupField.text.trim() !== ""
+                    KeyNavigation.up: boardNamePopupField
+                    KeyNavigation.left: cancelBoardNameButton
+                    onClicked: root.saveBoardName()
+                }
             }
         }
     }

@@ -26,6 +26,15 @@ Popup {
         }
     }
 
+    Connections {
+        target: DeviceController
+
+        function onConfigurationChanged() {
+            closedCalibrationRow.slider.value = DeviceController.servoClosedPulseUs
+            openCalibrationRow.slider.value = DeviceController.servoOpenPulseUs
+        }
+    }
+
     Overlay.modal: Rectangle {
         color: "#99000000"
     }
@@ -74,6 +83,7 @@ Popup {
         }
 
         CalibrationRow {
+            id: closedCalibrationRow
             Layout.fillWidth: true
             title: "Closed position"
             subtitle: "Position used when headlights are closed"
@@ -82,6 +92,7 @@ Popup {
         }
 
         CalibrationRow {
+            id: openCalibrationRow
             Layout.fillWidth: true
             title: "Open position"
             subtitle: "Position used when headlights are open"
@@ -138,6 +149,7 @@ Popup {
         property string title: ""
         property string subtitle: ""
         property int value: 0
+        property alias slider: calibrationSlider
         signal valueMoved(int value)
 
         Layout.preferredHeight: 87
@@ -195,6 +207,7 @@ Popup {
             }
 
             ValueSlider {
+                id: calibrationSlider
                 Layout.fillWidth: true
                 from: 0
                 to: 4095

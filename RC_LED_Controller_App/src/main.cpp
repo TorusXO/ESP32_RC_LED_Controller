@@ -4,6 +4,29 @@
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQuickStyle>
+#include <QSettings>
+
+static void migrateLegacySettings()
+{
+    QSettings CurrentSettings;
+    const QString MigrationKey = QStringLiteral("migration/legacyOrganizationImported");
+    if (CurrentSettings.value(MigrationKey, false).toBool())
+        return;
+
+    // Compatibility only: preserve settings saved under the former organization.
+    // This cannot read another Android package's private storage.
+    QSettings LegacySettings(QStringLiteral("SpiralKnightsInvoked"),
+                             QCoreApplication::applicationName());
+    for (const QString& Key : LegacySettings.allKeys()) {
+        if (!CurrentSettings.contains(Key))
+            CurrentSettings.setValue(Key, LegacySettings.value(Key));
+    }
+    CurrentSettings.sync();
+    if (CurrentSettings.status() == QSettings::NoError) {
+        CurrentSettings.setValue(MigrationKey, true);
+        CurrentSettings.sync();
+    }
+}
 
 int main(int aArgumentCount, char* aArgumentValuesPtr[])
 {
@@ -13,12 +36,14 @@ int main(int aArgumentCount, char* aArgumentValuesPtr[])
     );
 
     QCoreApplication::setOrganizationName(
-        QStringLiteral("SpiralKnightsInvoked")
+        QStringLiteral("RCLEDController")
     );
 
     QCoreApplication::setApplicationName(
         QStringLiteral("RC LED Controller")
     );
+
+    migrateLegacySettings();
 
     QQuickStyle::setStyle(
         QStringLiteral("Basic")

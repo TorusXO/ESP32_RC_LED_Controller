@@ -308,6 +308,7 @@ int FDeviceController::GetFanSpeedPercent() const
 
 int FDeviceController::GetExhaustLight1Channel() const { return ExhaustLight1Channel; }
 int FDeviceController::GetExhaustLight2Channel() const { return ExhaustLight2Channel; }
+int FDeviceController::GetExhaustLight3Channel() const { return ExhaustLight3Channel; }
 int FDeviceController::GetPassiveLightsChannel() const { return PassiveLightsChannel; }
 int FDeviceController::GetTailLightsChannel() const { return TailLightsChannel; }
 int FDeviceController::GetLeftTurnLightsChannel() const { return LeftTurnLightsChannel; }
@@ -819,6 +820,11 @@ void FDeviceController::SetExhaustLight2Channel(int aChannel)
     ExhaustLight2Channel = qBound(-1, aChannel, 15); MarkSettingsDirty();
 }
 
+void FDeviceController::SetExhaustLight3Channel(int aChannel)
+{
+    ExhaustLight3Channel = qBound(-1, aChannel, 15); MarkSettingsDirty();
+}
+
 void FDeviceController::SetPassiveLightsChannel(int aChannel)
 {
     PassiveLightsChannel = qBound(-1, aChannel, 15); MarkSettingsDirty();
@@ -896,7 +902,7 @@ void FDeviceController::ZeroServo()
 
 void FDeviceController::SetChannelRole(int aChannel, int aRole)
 {
-    if (aChannel < 0 || aChannel > 15 || aRole < 0 || aRole > 9)
+    if (aChannel < 0 || aChannel > 15 || aRole < 0 || aRole > 10)
     {
         return;
     }
@@ -928,6 +934,7 @@ QJsonObject FDeviceController::BuildSettingsObject() const
     SettingsObject[QStringLiteral("servoOpenPulseUs")] = ServoOpenPulseUs;
     SettingsObject[QStringLiteral("exhaustLight1Channel")] = ExhaustLight1Channel;
     SettingsObject[QStringLiteral("exhaustLight2Channel")] = ExhaustLight2Channel;
+    SettingsObject[QStringLiteral("exhaustLight3Channel")] = ExhaustLight3Channel;
     SettingsObject[QStringLiteral("passiveLightsChannel")] = PassiveLightsChannel;
     SettingsObject[QStringLiteral("tailLightsChannel")] = TailLightsChannel;
     SettingsObject[QStringLiteral("leftTurnLightsChannel")] = LeftTurnLightsChannel;
@@ -1027,6 +1034,10 @@ bool FDeviceController::ApplySettingsObject(
         ExhaustLight2Channel,
         aSettingsObject.value(QStringLiteral("exhaustLight2Channel"))
     );
+    ExhaustLight3Channel = ParseChannel(
+        ExhaustLight3Channel,
+        aSettingsObject.value(QStringLiteral("exhaustLight3Channel"))
+    );
     PassiveLightsChannel = ParseChannel(
         PassiveLightsChannel,
         aSettingsObject.value(QStringLiteral("passiveLightsChannel"))
@@ -1058,7 +1069,7 @@ bool FDeviceController::ApplySettingsObject(
             ChannelRoles[Channel] = qBound(
                 0,
                 RoleArray.at(Channel).toInt(ChannelRoles[Channel]),
-                9
+                10
             );
         }
     }
@@ -1247,6 +1258,10 @@ void FDeviceController::LoadLocalSettings()
         QStringLiteral("settings/exhaustLight2Channel"),
         ExhaustLight2Channel
     ).toInt();
+    ExhaustLight3Channel = LocalSettings.value(
+        QStringLiteral("settings/exhaustLight3Channel"),
+        ExhaustLight3Channel
+    ).toInt();
     PassiveLightsChannel = LocalSettings.value(
         QStringLiteral("settings/passiveLightsChannel"),
         PassiveLightsChannel
@@ -1355,6 +1370,10 @@ bool FDeviceController::StoreLocalSettings() const
     LocalSettings.setValue(
         QStringLiteral("settings/exhaustLight2Channel"),
         ExhaustLight2Channel
+    );
+    LocalSettings.setValue(
+        QStringLiteral("settings/exhaustLight3Channel"),
+        ExhaustLight3Channel
     );
     LocalSettings.setValue(
         QStringLiteral("settings/passiveLightsChannel"),
@@ -1474,6 +1493,7 @@ void FDeviceController::SendSettingsToController()
     const QList<QPair<const char*, int>> ChannelAssignments = {
         {"EXHAUST_LIGHT_1_CHANNEL", ExhaustLight1Channel},
         {"EXHAUST_LIGHT_2_CHANNEL", ExhaustLight2Channel},
+        {"EXHAUST_LIGHT_3_CHANNEL", ExhaustLight3Channel},
         {"PASSIVE_LIGHTS_CHANNEL", PassiveLightsChannel},
         {"TAIL_LIGHTS_CHANNEL", TailLightsChannel},
         {"LEFT_TURN_LIGHTS_CHANNEL", LeftTurnLightsChannel},
@@ -1548,7 +1568,8 @@ void FDeviceController::ResetDefaults()
 
     ExhaustLight1Channel = 0;
     ExhaustLight2Channel = 1;
-    PassiveLightsChannel = 2;
+    ExhaustLight3Channel = 2;
+    PassiveLightsChannel = 3;
     TailLightsChannel = 13;
     LeftTurnLightsChannel = 14;
     RightTurnLightsChannel = 15;
@@ -1558,11 +1579,21 @@ void FDeviceController::ResetDefaults()
     ServoOpenPulseUs = 512;
     bServoZeroed = false;
     ChannelRoles = {
-        1, 2, 3, 0, 0, 0, 0, 0,
+        1, 2, 10, 3, 0, 0, 0, 0,
         0, 0, 0, 0, 7, 4, 5, 6
     };
 
     MarkSettingsDirty();
+}
+
+void FDeviceController::TestExhaustColor(const QString& aColor)
+{
+    if (aColor != QStringLiteral("R") && aColor != QStringLiteral("G") &&
+        aColor != QStringLiteral("B") && aColor != QStringLiteral("OFF"))
+    {
+        return;
+    }
+    SendCommand(QByteArray("TEST,EXHAUST,") + aColor.toUtf8());
 }
 
 void FDeviceController::TestExhaust()
@@ -1918,7 +1949,7 @@ void FDeviceController::ParseConfiguration(
             ChannelRoles[Channel] = qBound(
                 0,
                 aFieldsRef[18 + Channel].toInt(),
-                9
+                10
             );
         }
     }
@@ -1944,6 +1975,14 @@ void FDeviceController::ParseConfiguration(
             aFieldsRef[38].toDouble(),
             0.20
         );
+    }
+
+    if (aFieldsRef.size() >= 40)
+    {
+        const int Channel = aFieldsRef[39].toInt();
+        ExhaustLight3Channel = Channel == 255
+            ? -1
+            : qBound(0, Channel, 15);
     }
 
     bSettingsDirty = false;

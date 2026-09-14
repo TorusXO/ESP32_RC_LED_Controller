@@ -19,7 +19,7 @@ public:
     void Update();
 
     bool ConsumeConfigurationChanged();
-    bool ConsumeExhaustTestRequested();
+    bool ConsumeExhaustTestRequested(uint8_t& aRole);
     bool ConsumeServoTestRequested(
         uint8_t& aChannel,
         uint16_t& aPulse
@@ -98,6 +98,7 @@ private:
     bool bHadBluetoothClient = false;
     bool bConfigurationChanged = false;
     bool bExhaustTestRequested = false;
+    uint8_t ExhaustTestRole = 0;
     bool bServoTestRequested = false;
     bool bServoTestClearRequested = false;
     uint8_t ServoTestChannel = 0;
