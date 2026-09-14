@@ -12,16 +12,22 @@ FocusScope {
     activeFocusOnTab: true
 
     property int activeCategory: 0
+    property string saveFeedback: ""
     readonly property var settingsRoles: [
         "Unused",
-        "Exhaust light 1",
-        "Exhaust light 2",
+        "Exhaust red",
+        "Exhaust green",
+        "Exhaust blue",
         "Passive lights",
         "Tail lights",
         "Left turning lights",
         "Right turning lights",
         "Headlight servo",
-        "Cooling fans"
+        "Cooling fans",
+        "White reverse lights"
+    ]
+    readonly property var settingsRoleValues: [
+        0, 1, 2, 10, 3, 4, 5, 6, 7, 8, 9
     ]
 
     signal goBack()
@@ -29,8 +35,69 @@ FocusScope {
     signal openAssignments()
     signal openServoCalibration()
 
+    Timer {
+        id: saveFeedbackTimer
+        interval: 3500
+        repeat: false
+        onTriggered: root.saveFeedback = ""
+    }
+
+    Connections {
+        target: DeviceController
+
+        function onSettingsSaveCompleted(uploaded, storedLocally) {
+            root.saveFeedback = !storedLocally
+                ? "Unable to store settings locally"
+                : uploaded
+                    ? "Settings saved locally and uploaded to ESP32"
+                    : "Saved locally; connect controller to upload"
+            saveFeedbackTimer.restart()
+        }
+    }
+
     function focusFirstControl() {
         focusActiveCategory()
+    }
+
+    function activeCategoryTab() {
+        if (root.activeCategory === 0) {
+            return accelerometerTab
+        } else if (root.activeCategory === 1) {
+            return outputTab
+        } else if (root.activeCategory === 2) {
+            return channelTab
+        } else if (root.activeCategory === 3) {
+            return servoTab
+        } else if (root.activeCategory === 4) {
+            return gyroTab
+        } else if (root.activeCategory === 5) {
+            return liveTab
+        } else if (root.activeCategory === 6) {
+            return diagnosticsTab
+        }
+
+        return profilesTab
+    }
+
+    function categoryMenuHasFocus() {
+        return backButton.activeFocus ||
+            accelerometerTab.activeFocus ||
+            outputTab.activeFocus ||
+            channelTab.activeFocus ||
+            servoTab.activeFocus ||
+            gyroTab.activeFocus ||
+            liveTab.activeFocus ||
+            diagnosticsTab.activeFocus ||
+            profilesTab.activeFocus
+    }
+
+    function handleBack() {
+        if (categoryMenuHasFocus()) {
+            root.goBack()
+            return
+        }
+
+        activeCategoryTab().forceActiveFocus()
     }
 
     function focusActiveCategory() {
@@ -44,9 +111,15 @@ FocusScope {
                 firstChannel.forceActiveFocus()
             }
         } else if (root.activeCategory === 3) {
-            servoClosedSlider.forceActiveFocus()
+            servoClosedSlider.slider.forceActiveFocus()
         } else if (root.activeCategory === 4) {
+            gyroForwardAxisSelector.forceActiveFocus()
+        } else if (root.activeCategory === 5) {
             livePanel.forceActiveFocus()
+        } else if (root.activeCategory === 6) {
+            diagnosticsButton.forceActiveFocus()
+        } else if (root.activeCategory === 7) {
+            addProfileButton.forceActiveFocus()
         } else {
             livePanel.forceActiveFocus()
         }
@@ -60,8 +133,8 @@ FocusScope {
     function cycleCategory(direction) {
         var category = root.activeCategory + direction
         if (category < 0) {
-            category = 4
-        } else if (category > 4) {
+            category = 7
+        } else if (category > 7) {
             category = 0
         }
         root.activateCategory(category)
@@ -125,6 +198,30 @@ FocusScope {
                     servoFlickable.contentY + amount
                 )
             )
+        } else if (root.activeCategory === 4) {
+            gyroFlickable.contentY = Math.max(
+                0,
+                Math.min(
+                    Math.max(0, gyroFlickable.contentHeight - gyroFlickable.height),
+                    gyroFlickable.contentY + amount
+                )
+            )
+        } else if (root.activeCategory === 6) {
+            diagnosticsFlickable.contentY = Math.max(
+                0,
+                Math.min(
+                    Math.max(0, diagnosticsFlickable.contentHeight - diagnosticsFlickable.height),
+                    diagnosticsFlickable.contentY + amount
+                )
+            )
+        } else if (root.activeCategory === 7) {
+            profilesFlickable.contentY = Math.max(
+                0,
+                Math.min(
+                    Math.max(0, profilesFlickable.contentHeight - profilesFlickable.height),
+                    profilesFlickable.contentY + amount
+                )
+            )
         }
     }
 
@@ -141,11 +238,43 @@ FocusScope {
         } else if (event.key === Qt.Key_PageDown) {
             root.scrollActiveContent(1)
             event.accepted = true
-        } else if (event.key === Qt.Key_Back ||
+        } else if (event.key === Qt.Key_X) {
+            DeviceController.ResetDefaults()
+            event.accepted = true
+        } else if (event.key === Qt.Key_Y) {
+            DeviceController.SaveSettings()
+            event.accepted = true
+        } else if (event.key === Qt.Key_A ||
+                   event.key === Qt.Key_Back ||
                    event.key === Qt.Key_Escape ||
                    event.key === Qt.Key_Backspace) {
-            root.goBack()
+            root.handleBack()
             event.accepted = true
+        }
+    }
+
+    Connections {
+        target: DeviceController
+
+        function onConfigurationChanged() {
+            triggerThresholdPanel.slider.value = DeviceController.triggerThresholdG
+            brightnessRow.slider.value = DeviceController.activeBrightnessPercent
+            dimBrightnessRow.slider.value = DeviceController.dimBrightnessPercent
+            fanSpeedRow.slider.value = DeviceController.fanSpeedPercent
+            servoClosedSlider.slider.value = DeviceController.servoClosedPulseUs
+            servoOpenSlider.slider.value = DeviceController.servoOpenPulseUs
+            gyroForwardAxisSelector.currentIndex = DeviceController.accelerometerForwardAxis
+            gyroForwardDirectionSelector.currentIndex = DeviceController.accelerometerForwardInverted
+                ? 1
+                : 0
+            gyroToleranceRow.slider.value = DeviceController.accelerometerToleranceG
+
+            for (var channel = 0; channel < settingsChannelList.count; ++channel) {
+                var channelRow = settingsChannelList.itemAtIndex(channel)
+                if (channelRow && channelRow.syncRoleFromController) {
+                    channelRow.syncRoleFromController()
+                }
+            }
         }
     }
 
@@ -163,9 +292,10 @@ FocusScope {
                 spacing: 14
 
                 Row {
-                    Layout.preferredWidth: 230
+                    Layout.preferredWidth: 76
                     Layout.alignment: Qt.AlignVCenter
-                    spacing: 12
+                    spacing: 8
+                    clip: true
 
                     ActionButton {
                         id: backButton
@@ -176,23 +306,38 @@ FocusScope {
                         onClicked: root.goBack()
                     }
 
+                    Text {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: "LT"
+                        color: Theme.textSecondary
+                        font.family: Theme.fontFamily
+                        font.pixelSize: 11
+                        font.weight: Font.Medium
+                    }
+
                     Column {
+                        width: parent.width - 54
                         anchors.verticalCenter: parent.verticalCenter
                         spacing: 3
+                        clip: true
 
                         Text {
+                            width: parent.width
                             text: "Settings"
                             color: Theme.textPrimary
                             font.family: Theme.fontFamily
                             font.pixelSize: 20
                             font.weight: Font.DemiBold
+                            elide: Text.ElideRight
+                            visible: false
                         }
 
                         Text {
-                            text: "A Back  •  LT / RT Select menu"
+                            text: "A Select  •  B Back  •  LT / RT Select menu"
                             color: Theme.textSecondary
                             font.family: Theme.fontFamily
                             font.pixelSize: 11
+                            visible: false
                         }
                     }
                 }
@@ -246,31 +391,63 @@ FocusScope {
                             category: 3
                             label: "Servo calibration"
                             KeyNavigation.left: channelTab
+                            KeyNavigation.right: gyroTab
+                            KeyNavigation.down: servoClosedSlider.slider
+                            onActivated: root.activateCategory(category)
+                        }
+
+                        SettingsTab {
+                            id: gyroTab
+                            category: 4
+                            label: "Gyro settings"
+                            KeyNavigation.left: servoTab
                             KeyNavigation.right: liveTab
-                            KeyNavigation.down: servoClosedSlider
+                            KeyNavigation.down: gyroForwardAxisSelector
                             onActivated: root.activateCategory(category)
                         }
 
                         SettingsTab {
                             id: liveTab
-                            category: 4
+                            category: 5
                             label: "Live values"
-                            KeyNavigation.left: servoTab
-                            KeyNavigation.right: accelerometerTab
+                            KeyNavigation.left: gyroTab
+                            KeyNavigation.right: diagnosticsTab
                             KeyNavigation.down: livePanel
+                            onActivated: root.activateCategory(category)
+                        }
+
+                        SettingsTab {
+                            id: diagnosticsTab
+                            category: 6
+                            label: "Diagnostics"
+                            KeyNavigation.left: liveTab
+                            KeyNavigation.right: profilesTab
+                            KeyNavigation.down: diagnosticsButton
+                            onActivated: root.activateCategory(category)
+                        }
+
+                        SettingsTab {
+                            id: profilesTab
+                            category: 7
+                            label: "Vehicle profiles"
+                            KeyNavigation.left: diagnosticsTab
+                            KeyNavigation.right: accelerometerTab
+                            KeyNavigation.down: addProfileButton
                             onActivated: root.activateCategory(category)
                         }
 
                     }
 
-                    ScrollBar.horizontal: ScrollBar {
-                        policy: ScrollBar.AsNeeded
-                        contentItem: Rectangle {
-                            implicitHeight: 3
-                            radius: 2
-                            color: Theme.track
-                        }
-                    }
+                    ScrollBar.horizontal: InsetHorizontalScrollBar {}
+                }
+
+                Text {
+                    Layout.alignment: Qt.AlignVCenter
+                    text: "RT >"
+                    color: Theme.textSecondary
+                    font.family: Theme.fontFamily
+                    font.pixelSize: 11
+                    font.weight: Font.Medium
                 }
             }
         }
@@ -290,23 +467,23 @@ FocusScope {
                     anchors.rightMargin: 18
                     anchors.topMargin: 16
                     anchors.bottomMargin: 16
-                    contentWidth: width
+                    contentWidth: width - 18
                     contentHeight: accelerometerContent.implicitHeight
                     clip: true
                     boundsBehavior: Flickable.StopAtBounds
 
-                    ScrollBar.vertical: ScrollBar {
-                        policy: ScrollBar.AsNeeded
-                        contentItem: Rectangle {
-                            implicitWidth: 4
-                            radius: 2
-                            color: Theme.track
+                    Behavior on contentY {
+                        NumberAnimation {
+                            duration: 180
+                            easing.type: Easing.OutCubic
                         }
                     }
 
+                    ScrollBar.vertical: InsetVerticalScrollBar {}
+
                     ColumnLayout {
                         id: accelerometerContent
-                        width: accelerometerFlickable.width
+                        width: accelerometerFlickable.contentWidth
                         spacing: 14
 
                         ControlRow {
@@ -314,39 +491,32 @@ FocusScope {
                             Layout.fillWidth: true
                             checked: DeviceController.accelerometerEnabled
                             title: "Exhaust accelerometer"
-                            subtitle: "Flash exhaust LEDs when acceleration exceeds the threshold"
+                            subtitle: "Add acceleration-triggered pops above 40% forward throttle"
                             KeyNavigation.up: null
-                            KeyNavigation.down: thresholdSlider
-                            KeyNavigation.right: thresholdSlider
+                            KeyNavigation.down: triggerThresholdPanel.slider
+                            KeyNavigation.right: triggerThresholdPanel.slider
 
                             onToggled: function(checked) {
                                 DeviceController.SetPendingAccelerometerEnabled(checked)
                             }
                         }
 
-                        SettingsValuePanel {
+                        SettingsSliderRow {
                             id: triggerThresholdPanel
                             Layout.fillWidth: true
-                            highlighted: thresholdSlider.activeFocus
+                            upControl: accelerometerRow
+                            downControl: testExhaustButton
+                            rightControl: testExhaustButton
                             title: "Trigger threshold"
                             subtitle: "Acceleration delta required to activate the effect"
                             valueText: DeviceController.triggerThresholdG.toFixed(2) + " g"
-                            valueColor: Theme.accent
+                            value: DeviceController.triggerThresholdG
+                            from: 0.01
+                            to: 0.50
+                            stepSize: 0.01
 
-                            ValueSlider {
-                                id: thresholdSlider
-                                anchors.fill: parent
-                                from: 0.01
-                                to: 0.50
-                                stepSize: 0.01
-                                value: DeviceController.triggerThresholdG
-                                KeyNavigation.up: accelerometerRow
-                                KeyNavigation.down: testExhaustButton
-                                KeyNavigation.right: testExhaustButton
-
-                                onMoved: {
-                                    DeviceController.SetPendingTriggerThresholdG(value)
-                                }
+                            onValueMoved: function(value) {
+                                DeviceController.SetPendingTriggerThresholdG(value)
                             }
                         }
 
@@ -494,9 +664,99 @@ FocusScope {
                                 id: testExhaustButton
                                 text: "Test exhaust"
                                 enabled: DeviceController.connected
-                                KeyNavigation.up: thresholdSlider
-                                KeyNavigation.right: brightnessRow.slider
+                                KeyNavigation.up: triggerThresholdPanel.slider
+                                KeyNavigation.down: testRedButton
+                                KeyNavigation.right: testRedButton
                                 onClicked: DeviceController.TestExhaust()
+                            }
+                        }
+
+                        Rectangle {
+                            Layout.fillWidth: true
+                            implicitHeight: rgbTestContent.implicitHeight + 28
+                            color: Theme.surface
+                            radius: 12
+
+                            ColumnLayout {
+                                id: rgbTestContent
+                                anchors.fill: parent
+                                anchors.margins: 14
+                                spacing: 12
+
+                                Text {
+                                    text: "RGB channel test"
+                                    color: Theme.textPrimary
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 14
+                                    font.weight: Font.Medium
+                                }
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: "Light one color for 2 seconds. Uses the channel roles saved on the ESP32; save changed assignments before testing."
+                                    color: Theme.textSecondary
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 10
+                                    wrapMode: Text.WordWrap
+                                }
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 10
+
+                                    ActionButton {
+                                        id: testRedButton
+                                        text: "Red only"
+                                        Layout.fillWidth: true
+                                        enabled: DeviceController.connected
+                                        KeyNavigation.up: testExhaustButton
+                                        KeyNavigation.down: testGreenButton
+                                        KeyNavigation.right: testGreenButton
+                                        onActiveFocusChanged: if (activeFocus) root.revealExhaustTest(this)
+                                        onClicked: DeviceController.TestExhaustColor("R")
+                                    }
+                                    ActionButton {
+                                        id: testGreenButton
+                                        text: "Green only"
+                                        Layout.fillWidth: true
+                                        enabled: DeviceController.connected
+                                        KeyNavigation.up: testRedButton
+                                        KeyNavigation.down: testBlueButton
+                                        KeyNavigation.left: testRedButton
+                                        KeyNavigation.right: testBlueButton
+                                        onActiveFocusChanged: if (activeFocus) root.revealExhaustTest(this)
+                                        onClicked: DeviceController.TestExhaustColor("G")
+                                    }
+                                    ActionButton {
+                                        id: testBlueButton
+                                        text: "Blue only"
+                                        Layout.fillWidth: true
+                                        enabled: DeviceController.connected
+                                        KeyNavigation.up: testGreenButton
+                                        KeyNavigation.down: stopExhaustTestButton
+                                        KeyNavigation.left: testGreenButton
+                                        KeyNavigation.right: stopExhaustTestButton
+                                        onActiveFocusChanged: if (activeFocus) root.revealExhaustTest(this)
+                                        onClicked: DeviceController.TestExhaustColor("B")
+                                    }
+                                    ActionButton {
+                                        id: stopExhaustTestButton
+                                        text: "Stop test"
+                                        Layout.fillWidth: true
+                                        enabled: DeviceController.connected
+                                        KeyNavigation.up: testBlueButton
+                                        KeyNavigation.down: saveSettingsButton
+                                        KeyNavigation.left: testBlueButton
+                                        onActiveFocusChanged: if (activeFocus) root.revealExhaustTest(this)
+                                        onClicked: DeviceController.TestExhaustColor("OFF")
+                                    }
+                                }
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: "Driving effect: spaced blue/orange pops at high throttle, short bursts on sharp blips or lift-off. Low, steady throttle stays dark."
+                                    color: Theme.textSecondary
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 10
+                                    wrapMode: Text.WordWrap
+                                }
                             }
                         }
                     }
@@ -512,23 +772,23 @@ FocusScope {
                     anchors.rightMargin: 18
                     anchors.topMargin: 16
                     anchors.bottomMargin: 16
-                    contentWidth: width
+                    contentWidth: width - 18
                     contentHeight: outputLevelsContent.implicitHeight
                     clip: true
                     boundsBehavior: Flickable.StopAtBounds
 
-                    ScrollBar.vertical: ScrollBar {
-                        policy: ScrollBar.AsNeeded
-                        contentItem: Rectangle {
-                            implicitWidth: 4
-                            radius: 2
-                            color: Theme.track
+                    Behavior on contentY {
+                        NumberAnimation {
+                            duration: 180
+                            easing.type: Easing.OutCubic
                         }
                     }
 
+                    ScrollBar.vertical: InsetVerticalScrollBar {}
+
                     ColumnLayout {
                         id: outputLevelsContent
-                        width: outputLevelsFlickable.width
+                        width: outputLevelsFlickable.contentWidth
                         spacing: 12
 
                         Column {
@@ -659,22 +919,22 @@ FocusScope {
                             spacing: 6
                             model: 16
                             boundsBehavior: Flickable.StopAtBounds
-                            currentIndex: 0
 
-                            ScrollBar.vertical: ScrollBar {
-                                policy: ScrollBar.AsNeeded
-                                contentItem: Rectangle {
-                                    implicitWidth: 4
-                                    radius: 2
-                                    color: Theme.track
+                            Behavior on contentY {
+                                NumberAnimation {
+                                    duration: 180
+                                    easing.type: Easing.OutCubic
                                 }
                             }
+                            currentIndex: 0
+
+                            ScrollBar.vertical: InsetVerticalScrollBar {}
 
                             delegate: Rectangle {
                                 id: settingsChannelRow
                                 required property int index
 
-                                width: settingsChannelList.width
+                                width: Math.max(0, settingsChannelList.width - 18)
                                 height: 48
                                 radius: 8
                                 activeFocusOnTab: true
@@ -699,6 +959,13 @@ FocusScope {
 
                                 function openRolePopup() {
                                     roleBox.popup.open()
+                                }
+
+                                function syncRoleFromController() {
+                                    var roleIndex = root.settingsRoleValues.indexOf(
+                                        DeviceController.GetChannelRole(settingsChannelRow.index)
+                                    )
+                                    roleBox.currentIndex = Math.max(0, roleIndex)
                                 }
 
                                 Keys.onPressed: function(event) {
@@ -741,8 +1008,13 @@ FocusScope {
                                         id: roleBox
                                         Layout.fillWidth: true
                                         model: root.settingsRoles
-                                        currentIndex: DeviceController.GetChannelRole(
-                                            settingsChannelRow.index
+                                        currentIndex: Math.max(
+                                            0,
+                                            root.settingsRoleValues.indexOf(
+                                                DeviceController.GetChannelRole(
+                                                    settingsChannelRow.index
+                                                )
+                                            )
                                         )
                                         activeFocusOnTab: false
                                         focus: false
@@ -751,14 +1023,37 @@ FocusScope {
                                         onActivated: {
                                             DeviceController.SetChannelRole(
                                                 settingsChannelRow.index,
-                                                currentIndex
+                                                root.settingsRoleValues[currentIndex]
                                             )
                                             popup.close()
                                             settingsChannelRow.forceActiveFocus()
                                         }
 
-                                        Keys.onPressed: function(event) {
-                                            if (event.key === Qt.Key_Return ||
+                                        Connections {
+                                            target: DeviceController
+
+                                            function onConfigurationChanged() {
+                                                settingsChannelRow.syncRoleFromController()
+                                            }
+                                        }
+
+                                                 Keys.onPressed: function(event) {
+                                                     var nativeKey = event.nativeVirtualKey !== undefined
+                                                         ? event.nativeVirtualKey
+                                                         : event.nativeScanCode
+                                                     if (event.key === Qt.Key_Up ||
+                                                         event.key === Qt.Key_Left ||
+                                                         nativeKey === 19 ||
+                                                         nativeKey === 21) {
+                                                         roleList.moveRole(-1)
+                                                         event.accepted = true
+                                                     } else if (event.key === Qt.Key_Down ||
+                                                         event.key === Qt.Key_Right ||
+                                                         nativeKey === 20 ||
+                                                         nativeKey === 22) {
+                                                         roleList.moveRole(1)
+                                                         event.accepted = true
+                                                     } else if (event.key === Qt.Key_Return ||
                                                 event.key === Qt.Key_Enter ||
                                                 event.key === Qt.Key_Space ||
                                                 event.key === Qt.Key_B) {
@@ -798,15 +1093,19 @@ FocusScope {
                                         }
 
                                         delegate: ItemDelegate {
-                                            id: settingsRoleDelegate
-                                            width: roleBox.width
-                                            height: 34
-                                             highlighted: settingsRolePopup.pendingIndex === index
+                                             id: settingsRoleDelegate
+                                             width: roleBox.width
+                                             height: 34
+                                             property bool activeRole:
+                                                 settingsRolePopup.pendingIndex === index
+                                             highlighted: activeRole
 
                                             contentItem: Text {
                                                 leftPadding: 10
                                                 text: modelData
-                                                color: Theme.textPrimary
+                                                 color: settingsRoleDelegate.activeRole
+                                                     ? Theme.textPrimary
+                                                     : Theme.textSecondary
                                                 font.family: Theme.fontFamily
                                                 font.pixelSize: 11
                                                 verticalAlignment: Text.AlignVCenter
@@ -814,12 +1113,9 @@ FocusScope {
 
                                             background: Rectangle {
                                                 radius: 7
-                                                color: settingsRoleDelegate.highlighted
-                                                    ? Theme.accentMuted
-                                                    : Theme.panel
-                                                border.width: settingsRoleDelegate.highlighted ? 1 : 0
-                                                border.color: Theme.accent
-                                            }
+                                                 color: "transparent"
+                                                 border.width: 0
+                                             }
                                         }
 
                                         popup: Popup {
@@ -838,19 +1134,28 @@ FocusScope {
                                                     roleList.currentIndex,
                                                     ListView.Contain
                                                 )
-                                                roleList.forceActiveFocus()
+                                                 Qt.callLater(function() {
+                                                     roleList.forceActiveFocus()
+                                                 })
                                             }
 
                                             onClosed: settingsChannelRow.forceActiveFocus()
 
                                             Keys.priority: Keys.BeforeItem
                                             Keys.onPressed: function(event) {
-                                                if (event.key === Qt.Key_Up ||
-                                                    event.key === Qt.Key_Left) {
+                                                 var nativeKey = event.nativeVirtualKey !== undefined
+                                                     ? event.nativeVirtualKey
+                                                     : event.nativeScanCode
+                                                 if (event.key === Qt.Key_Up ||
+                                                     event.key === Qt.Key_Left ||
+                                                     nativeKey === 19 ||
+                                                     nativeKey === 21) {
                                                     roleList.moveRole(-1)
                                                     event.accepted = true
-                                                } else if (event.key === Qt.Key_Down ||
-                                                    event.key === Qt.Key_Right) {
+                                                 } else if (event.key === Qt.Key_Down ||
+                                                     event.key === Qt.Key_Right ||
+                                                     nativeKey === 20 ||
+                                                     nativeKey === 22) {
                                                     roleList.moveRole(1)
                                                     event.accepted = true
                                                 } else if (event.key === Qt.Key_PageUp) {
@@ -872,10 +1177,31 @@ FocusScope {
                                                     contentHeight,
                                                     9 * 34
                                                 )
-                                                model: settingsRolePopup.visible
-                                                    ? roleBox.delegateModel
-                                                    : null
-                                                currentIndex: 0
+                                                 model: settingsRolePopup.visible
+                                                     ? roleBox.delegateModel
+                                                     : null
+                                                 currentIndex: 0
+                                                 highlightFollowsCurrentItem: true
+                                                 highlightMoveDuration: 0
+
+                                                 highlight: Rectangle {
+                                                     width: Math.max(0, roleList.width - 18)
+                                                     height: 34
+                                                     radius: 7
+                                                     color: Theme.accentMuted
+                                                     border.width: 2
+                                                     border.color: Theme.accent
+                                                     z: -1
+
+                                                     Rectangle {
+                                                         anchors.left: parent.left
+                                                         anchors.top: parent.top
+                                                         anchors.bottom: parent.bottom
+                                                         width: 3
+                                                         radius: 2
+                                                         color: Theme.accent
+                                                     }
+                                                 }
 
                                                 function moveRole(delta) {
                                                     var next = Math.max(
@@ -887,11 +1213,12 @@ FocusScope {
                                                     )
                                                     currentIndex = next
                                                     settingsRolePopup.pendingIndex = next
-                                                    positionViewAtIndex(
-                                                        next,
-                                                        ListView.Contain
-                                                    )
-                                                }
+                                                     positionViewAtIndex(
+                                                         next,
+                                                         ListView.Contain
+                                                     )
+                                                     roleList.forceActiveFocus()
+                                                 }
 
                                                 Keys.onPressed: function(event) {
                                                     if (event.key === Qt.Key_Return ||
@@ -901,21 +1228,20 @@ FocusScope {
                                                         roleBox.currentIndex = roleList.currentIndex
                                                         DeviceController.SetChannelRole(
                                                             settingsChannelRow.index,
-                                                            roleList.currentIndex
+                                                            root.settingsRoleValues[roleList.currentIndex]
                                                         )
                                                         settingsRolePopup.close()
                                                         event.accepted = true
                                                     } else if (event.key === Qt.Key_Back ||
                                                                event.key === Qt.Key_Escape ||
-                                                               event.key === Qt.Key_Backspace) {
+                                                               event.key === Qt.Key_Backspace ||
+                                                               event.key === Qt.Key_A) {
                                                         settingsRolePopup.close()
                                                         event.accepted = true
                                                     }
                                                 }
 
-                                                ScrollBar.vertical: ScrollBar {
-                                                    policy: ScrollBar.AsNeeded
-                                                }
+                                                ScrollBar.vertical: InsetVerticalScrollBar {}
                                             }
 
                                             background: Rectangle {
@@ -944,23 +1270,23 @@ FocusScope {
                     anchors.rightMargin: 18
                     anchors.topMargin: 16
                     anchors.bottomMargin: 16
-                    contentWidth: width
+                    contentWidth: width - 18
                     contentHeight: servoContent.implicitHeight
                     clip: true
                     boundsBehavior: Flickable.StopAtBounds
 
-                    ScrollBar.vertical: ScrollBar {
-                        policy: ScrollBar.AsNeeded
-                        contentItem: Rectangle {
-                            implicitWidth: 4
-                            radius: 2
-                            color: Theme.track
+                    Behavior on contentY {
+                        NumberAnimation {
+                            duration: 180
+                            easing.type: Easing.OutCubic
                         }
                     }
 
+                    ScrollBar.vertical: InsetVerticalScrollBar {}
+
                     ColumnLayout {
                         id: servoContent
-                        width: parent.width
+                        width: servoFlickable.contentWidth
                         spacing: 14
 
                         Column {
@@ -991,7 +1317,7 @@ FocusScope {
                             subtitle: "Position used when headlights are closed"
                             value: DeviceController.servoClosedPulseUs
                             upControl: null
-                            downControl: servoOpenSlider
+                            downControl: servoOpenSlider.slider
                             onValueMoved: DeviceController.SetPendingServoClosedPulseUs(value)
                         }
 
@@ -1001,7 +1327,7 @@ FocusScope {
                             title: "Open position"
                             subtitle: "Position used when headlights are open"
                             value: DeviceController.servoOpenPulseUs
-                            upControl: servoClosedSlider
+                            upControl: servoClosedSlider.slider
                             downControl: zeroServoButton
                             onValueMoved: DeviceController.SetPendingServoOpenPulseUs(value)
                         }
@@ -1027,7 +1353,7 @@ FocusScope {
                                 id: zeroServoButton
                                 text: "Zero-out servo"
                                 controllerKey: Qt.Key_X
-                                KeyNavigation.up: servoOpenSlider
+                                KeyNavigation.up: servoOpenSlider.slider
                                 onClicked: DeviceController.ZeroServo()
                             }
                         }
@@ -1051,8 +1377,204 @@ FocusScope {
             }
 
             Card {
-                id: livePanel
+                id: gyroPanel
                 highlighted: root.activeCategory === 4
+
+                Flickable {
+                    id: gyroFlickable
+                    anchors.fill: parent
+                    anchors.leftMargin: 18
+                    anchors.rightMargin: 18
+                    anchors.topMargin: 16
+                    anchors.bottomMargin: 16
+                    contentWidth: width - 18
+                    contentHeight: gyroContent.implicitHeight
+                    clip: true
+                    boundsBehavior: Flickable.StopAtBounds
+
+                    Behavior on contentY {
+                        NumberAnimation {
+                            duration: 180
+                            easing.type: Easing.OutCubic
+                        }
+                    }
+
+                    ScrollBar.vertical: InsetVerticalScrollBar {}
+
+                    ColumnLayout {
+                        id: gyroContent
+                        width: gyroFlickable.contentWidth
+                        spacing: 14
+
+                        Column {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 38
+                            spacing: 4
+
+                            Text {
+                                text: "Gyro settings"
+                                color: Theme.textPrimary
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 17
+                                font.weight: Font.DemiBold
+                            }
+
+                            Text {
+                                text: "Configure the MPU6050 orientation and ignore small sensor noise"
+                                color: Theme.textSecondary
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 11
+                            }
+                        }
+
+                        Rectangle {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 76
+                            color: Theme.surface
+                            radius: 12
+
+                            RowLayout {
+                                anchors.fill: parent
+                                anchors.leftMargin: 14
+                                anchors.rightMargin: 14
+                                spacing: 12
+
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 4
+
+                                    Text {
+                                        text: "Forward axis"
+                                        color: Theme.textPrimary
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: 14
+                                        font.weight: Font.Medium
+                                    }
+
+                                    Text {
+                                        text: "Which accelerometer axis points toward the front of the car"
+                                        color: Theme.textSecondary
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: 10
+                                        wrapMode: Text.WordWrap
+                                    }
+                                }
+
+                                OptionSelector {
+                                    id: gyroForwardAxisSelector
+                                    Layout.preferredWidth: 190
+                                    Layout.preferredHeight: 34
+                                    options: ["X axis", "Y axis", "Z axis"]
+                                    currentIndex: DeviceController.accelerometerForwardAxis
+                                    KeyNavigation.up: gyroTab
+                                    KeyNavigation.down: gyroForwardDirectionSelector
+
+                                    onSelectionChanged: function(index) {
+                                        DeviceController.SetPendingAccelerometerForwardAxis(index)
+                                    }
+                                }
+                            }
+                        }
+
+                        Rectangle {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 76
+                            color: Theme.surface
+                            radius: 12
+
+                            RowLayout {
+                                anchors.fill: parent
+                                anchors.leftMargin: 14
+                                anchors.rightMargin: 14
+                                spacing: 12
+
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 4
+
+                                    Text {
+                                        text: "Forward direction"
+                                        color: Theme.textPrimary
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: 14
+                                        font.weight: Font.Medium
+                                    }
+
+                                    Text {
+                                        text: "Choose which sign represents forward acceleration"
+                                        color: Theme.textSecondary
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: 10
+                                        wrapMode: Text.WordWrap
+                                    }
+                                }
+
+                                OptionSelector {
+                                    id: gyroForwardDirectionSelector
+                                    Layout.preferredWidth: 190
+                                    Layout.preferredHeight: 34
+                                    options: ["Positive", "Negative"]
+                                    currentIndex: DeviceController.accelerometerForwardInverted
+                                        ? 1
+                                        : 0
+                                    KeyNavigation.up: gyroForwardAxisSelector
+                                    KeyNavigation.down: gyroToleranceRow.slider
+
+                                    onSelectionChanged: function(index) {
+                                        DeviceController.SetPendingAccelerometerForwardInverted(index === 1)
+                                    }
+                                }
+                            }
+                        }
+
+                        SettingsSliderRow {
+                            id: gyroToleranceRow
+                            Layout.fillWidth: true
+                            upControl: gyroForwardDirectionSelector
+                            downControl: livePanel
+                            title: "Accelerometer tolerance"
+                            subtitle: "Ignore small readings caused by sensor noise"
+                            valueText: DeviceController.accelerometerToleranceG.toFixed(2) + " g"
+                            value: DeviceController.accelerometerToleranceG
+                            from: 0.00
+                            to: 0.20
+                            stepSize: 0.01
+
+                            onValueMoved: function(value) {
+                                DeviceController.SetPendingAccelerometerToleranceG(value)
+                            }
+                        }
+
+                        Text {
+                            Layout.fillWidth: true
+                            text: "The filtered forward acceleration is used by the exhaust trigger."
+                            color: Theme.textSecondary
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 10
+                            wrapMode: Text.WordWrap
+                        }
+                    }
+
+                    Connections {
+                        target: DeviceController
+
+                        function onConfigurationChanged() {
+                            gyroForwardAxisSelector.currentIndex =
+                                DeviceController.accelerometerForwardAxis
+                            gyroForwardDirectionSelector.currentIndex =
+                                DeviceController.accelerometerForwardInverted
+                                    ? 1
+                                    : 0
+                            gyroToleranceRow.slider.value =
+                                DeviceController.accelerometerToleranceG
+                        }
+                    }
+                }
+            }
+
+            Card {
+                id: livePanel
+                highlighted: root.activeCategory === 5
                 activeFocusOnTab: true
                 focus: false
                 KeyNavigation.up: liveTab
@@ -1142,6 +1664,384 @@ FocusScope {
                 }
             }
 
+            Card {
+                id: diagnosticsPanel
+                highlighted: root.activeCategory === 6
+
+                Flickable {
+                    id: diagnosticsFlickable
+                    anchors.fill: parent
+                    anchors.margins: 18
+                    contentWidth: width - 18
+                    contentHeight: diagnosticsContent.implicitHeight
+                    clip: true
+                    boundsBehavior: Flickable.StopAtBounds
+
+                    Behavior on contentY {
+                        NumberAnimation {
+                            duration: 180
+                            easing.type: Easing.OutCubic
+                        }
+                    }
+
+                    ScrollBar.vertical: InsetVerticalScrollBar {}
+
+                    ColumnLayout {
+                        id: diagnosticsContent
+                        width: diagnosticsFlickable.contentWidth
+                        spacing: 14
+
+                        Column {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 38
+                            spacing: 4
+
+                            Text {
+                                text: "Run diagnostics"
+                                color: Theme.textPrimary
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 17
+                                font.weight: Font.DemiBold
+                            }
+
+                            Text {
+                                text: "Ask the ESP32 which I2C devices and RC channels it can see"
+                                color: Theme.textSecondary
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 11
+                            }
+                        }
+
+                        ActionButton {
+                            id: diagnosticsButton
+                            text: DeviceController.diagnosticsPending
+                                ? "Checking..."
+                                : "Run diagnostics"
+                            primary: true
+                            enabled: DeviceController.connected &&
+                                !DeviceController.diagnosticsPending
+                            KeyNavigation.up: diagnosticsTab
+                            KeyNavigation.down: resetDefaultsButton
+                            onClicked: DeviceController.RunDiagnostics()
+                        }
+
+                        Rectangle {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 170
+                            color: Theme.surface
+                            radius: 12
+
+                            ColumnLayout {
+                                anchors.fill: parent
+                                anchors.margins: 14
+                                spacing: 8
+
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: DeviceController.diagnosticsSummary
+                                    color: Theme.textPrimary
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 12
+                                    font.weight: Font.Medium
+                                    wrapMode: Text.WordWrap
+                                }
+
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: "PCA9685: " + DeviceController.pcaStatusText +
+                                        "\nAccelerometer: " + DeviceController.accelerometerStatusText +
+                                        "\nRC channels: CH1 " + DeviceController.steeringSignalStatus +
+                                        "  •  CH2 " + DeviceController.throttleSignalStatus
+                                    color: Theme.textSecondary
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 11
+                                    lineHeight: 1.2
+                                    wrapMode: Text.WordWrap
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            Card {
+                id: profilesPanel
+                highlighted: root.activeCategory === 7
+
+                Flickable {
+                    id: profilesFlickable
+                    anchors.fill: parent
+                    anchors.margins: 18
+                    contentWidth: width - 18
+                    contentHeight: profilesContent.implicitHeight
+                    clip: true
+                    boundsBehavior: Flickable.StopAtBounds
+
+                    Behavior on contentY {
+                        NumberAnimation {
+                            duration: 180
+                            easing.type: Easing.OutCubic
+                        }
+                    }
+
+                    ScrollBar.vertical: InsetVerticalScrollBar {}
+
+                    ColumnLayout {
+                        id: profilesContent
+                        width: profilesFlickable.contentWidth
+                        spacing: 14
+
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            Layout.leftMargin: 14
+                            Layout.rightMargin: 14
+                            spacing: 4
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: 10
+
+                                ActionButton {
+                                    id: addProfileButton
+                                    text: "+"
+                                    Layout.preferredWidth: 36
+                                    Layout.preferredHeight: 34
+                                    Accessible.name: "Add saved setup"
+                                    KeyNavigation.up: profilesTab
+                                    KeyNavigation.down: addBoardButton
+                                    onClicked: root.openNewProfilePopup()
+                                }
+
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: "Vehicle profiles"
+                                    color: Theme.textPrimary
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 17
+                                    font.weight: Font.DemiBold
+                                    elide: Text.ElideRight
+                                }
+                            }
+
+                            Text {
+                                Layout.fillWidth: true
+                                Layout.leftMargin: 46
+                                text: "Keep a named setup for each body and match it to the connected ESP32"
+                                color: Theme.textSecondary
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 11
+                                wrapMode: Text.WordWrap
+                            }
+                        }
+
+                        Rectangle {
+                            Layout.fillWidth: true
+                            implicitHeight: connectedBoardContent.implicitHeight + 28
+                            color: Theme.surface
+                            radius: 12
+
+                            ColumnLayout {
+                                id: connectedBoardContent
+                                anchors.fill: parent
+                                anchors.margins: 14
+                                spacing: 6
+
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 10
+
+                                    ActionButton {
+                                        id: addBoardButton
+                                        text: "+"
+                                        Layout.preferredWidth: 36
+                                        Layout.preferredHeight: 34
+                                        Accessible.name: "Name connected board"
+                                        KeyNavigation.up: addProfileButton
+                                        KeyNavigation.down: profileList
+                                        onClicked: root.openBoardNamePopup()
+                                    }
+
+                                    Text {
+                                        Layout.fillWidth: true
+                                        text: "Connected board: " + DeviceController.boardName
+                                        color: Theme.textPrimary
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: 17
+                                        font.weight: Font.DemiBold
+                                        elide: Text.ElideRight
+                                    }
+                                }
+
+                                Text {
+                                    Layout.fillWidth: true
+                                    Layout.leftMargin: 46
+                                    text: "ESP32 ID: " + DeviceController.boardId
+                                    color: Theme.textSecondary
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 10
+                                    elide: Text.ElideRight
+                                }
+
+                                Text {
+                                    Layout.fillWidth: true
+                                    Layout.leftMargin: 46
+                                    text: DeviceController.activeProfileName !== ""
+                                        ? "Active preset: " + DeviceController.activeProfileName
+                                        : "Active preset: None"
+                                    color: DeviceController.activeProfileName !== ""
+                                        ? Theme.green
+                                        : Theme.textSecondary
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 10
+                                    elide: Text.ElideRight
+                                }
+
+                                Text {
+                                    Layout.fillWidth: true
+                                    Layout.leftMargin: 46
+                                    text: DeviceController.matchingProfileName !== ""
+                                        ? "Matching setup: " + DeviceController.matchingProfileName
+                                        : "No saved setup is assigned to this ESP32 yet"
+                                    color: DeviceController.matchingProfileName !== ""
+                                        ? Theme.green
+                                        : Theme.textSecondary
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 10
+                                    elide: Text.ElideRight
+                                }
+                            }
+                        }
+
+                        Text {
+                            Layout.fillWidth: true
+                            text: "Use + to add a saved setup. Select one and press A or Load selected to apply it locally; use Save to ESP32 below to update the connected board."
+                            color: Theme.textSecondary
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 10
+                            wrapMode: Text.WordWrap
+                        }
+
+                        ListView {
+                            id: profileList
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: Math.min(
+                                150,
+                                Math.max(44, contentHeight)
+                            )
+                            clip: true
+                            focus: false
+                            activeFocusOnTab: true
+                            model: DeviceController.profileNames
+                            currentIndex: {
+                                var activeIndex = DeviceController.profileNames.indexOf(
+                                    DeviceController.activeProfileName
+                                )
+                                return activeIndex >= 0
+                                    ? activeIndex
+                                    : (DeviceController.profileNames.length > 0 ? 0 : -1)
+                            }
+                            KeyNavigation.up: addBoardButton
+                            KeyNavigation.down: loadProfileButton
+
+                            Keys.onPressed: function(event) {
+                                if (event.key === Qt.Key_Return ||
+                                    event.key === Qt.Key_Enter ||
+                                    event.key === Qt.Key_Space) {
+                                    root.loadSelectedProfile()
+                                    event.accepted = true
+                                }
+                            }
+
+                            delegate: Rectangle {
+                                required property string modelData
+                                required property int index
+                                property bool isActiveProfile:
+                                    DeviceController.activeProfileName !== "" &&
+                                    DeviceController.activeProfileName === modelData
+
+                                width: profileList.width
+                                height: 36
+                                radius: 8
+                                color: isActiveProfile || profileList.currentIndex === index
+                                    ? Theme.accentMuted
+                                    : Theme.surface
+                                border.width: isActiveProfile || profileList.currentIndex === index ? 2 : 1
+                                border.color: isActiveProfile
+                                    ? Theme.green
+                                    : profileList.currentIndex === index
+                                    ? Theme.accent
+                                    : Theme.border
+
+                                Text {
+                                    anchors.fill: parent
+                                    anchors.leftMargin: 12
+                                    anchors.rightMargin: 72
+                                    text: parent.modelData
+                                    color: Theme.textPrimary
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 11
+                                    verticalAlignment: Text.AlignVCenter
+                                }
+
+                                Text {
+                                    visible: parent.isActiveProfile
+                                    anchors.right: parent.right
+                                    anchors.rightMargin: 12
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: "ACTIVE"
+                                    color: Theme.green
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 9
+                                    font.weight: Font.DemiBold
+                                }
+
+                                TapHandler {
+                                    onTapped: {
+                                        profileList.currentIndex = parent.index
+                                        profileList.forceActiveFocus()
+                                    }
+                                }
+                            }
+                        }
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 10
+
+                            ActionButton {
+                                id: loadProfileButton
+                                text: "Load selected"
+                                enabled: profileList.currentIndex >= 0
+                                KeyNavigation.up: profileList
+                                KeyNavigation.down: loadMatchingProfileButton
+                                onClicked: root.loadSelectedProfile()
+                            }
+
+                            ActionButton {
+                                id: loadMatchingProfileButton
+                                text: "Load board match"
+                                enabled: DeviceController.matchingProfileName !== ""
+                                KeyNavigation.up: loadProfileButton
+                                KeyNavigation.down: deleteProfileButton
+                                onClicked: DeviceController.LoadMatchingProfile()
+                            }
+
+                            ActionButton {
+                                id: deleteProfileButton
+                                text: "Delete"
+                                enabled: profileList.currentIndex >= 0
+                                KeyNavigation.up: loadMatchingProfileButton
+                                KeyNavigation.down: resetDefaultsButton
+                                onClicked: DeviceController.DeleteProfile(
+                                    DeviceController.profileNames[profileList.currentIndex]
+                                )
+                            }
+                        }
+
+                    }
+                }
+            }
+
         }
 
         RowLayout {
@@ -1149,22 +2049,34 @@ FocusScope {
             Layout.preferredHeight: 44
 
                         Text {
-                            text: DeviceController.settingsDirty
-                                ? DeviceController.connected
-                                    ? "Unsaved changes"
-                                    : "Unsaved changes • Connect controller to save"
-                                : "Values are stored on the ESP32 controller"
-                color: DeviceController.settingsDirty
-                    ? Theme.warning
-                    : Theme.textSecondary
+                            Layout.fillWidth: true
+                            text: root.saveFeedback !== ""
+                                ? root.saveFeedback
+                                : DeviceController.settingsDirty
+                                    ? "Unsaved changes — press Y to save"
+                                    : DeviceController.settingsSyncStatus !== ""
+                                        ? DeviceController.settingsSyncStatus
+                                        : DeviceController.connected
+                                            ? DeviceController.deviceStatusSummary
+                                            : DeviceController.connectionStatus
+                            color: root.saveFeedback !== ""
+                                ? (root.saveFeedback === "Settings saved locally and uploaded to ESP32"
+                                    ? Theme.green
+                                    : Theme.warning)
+                                : DeviceController.settingsDirty
+                                    ? Theme.warning
+                                    : Theme.textSecondary
                 font.family: Theme.fontFamily
                 font.pixelSize: 10
+                elide: Text.ElideRight
             }
 
             Item { Layout.fillWidth: true }
 
             Text {
-                text: "Y Save   X Restore defaults"
+                text: DeviceController.connected
+                    ? "A Select   B Back   Y Save to ESP32   X Restore defaults"
+                    : "A Select   B Back   Y Save locally   X Restore defaults"
                 color: Theme.textSecondary
                 font.family: Theme.fontFamily
                 font.pixelSize: 10
@@ -1183,14 +2095,22 @@ FocusScope {
                             ? settingsChannelList.itemAtIndex(15)
                             : root.activeCategory === 3
                                 ? zeroServoButton
-                                : livePanel
+                                : root.activeCategory === 4
+                                    ? gyroToleranceRow.slider
+                                    : root.activeCategory === 5
+                                        ? livePanel
+                                        : root.activeCategory === 6
+                                            ? diagnosticsButton
+                                            : deleteProfileButton
                 KeyNavigation.right: saveSettingsButton
                 onClicked: DeviceController.ResetDefaults()
             }
 
             ActionButton {
                 id: saveSettingsButton
-                text: "Save settings"
+                text: DeviceController.connected
+                    ? "Save to ESP32"
+                    : "Save locally"
                 controllerKey: Qt.Key_Y
                 primary: true
                 KeyNavigation.left: resetDefaultsButton
@@ -1202,9 +2122,267 @@ FocusScope {
                             ? settingsChannelList.itemAtIndex(15)
                             : root.activeCategory === 3
                                 ? zeroServoButton
-                                : livePanel
+                                : root.activeCategory === 4
+                                    ? gyroToleranceRow.slider
+                                    : root.activeCategory === 5
+                                        ? livePanel
+                                        : root.activeCategory === 6
+                                            ? diagnosticsButton
+                                            : deleteProfileButton
                 enabled: DeviceController.settingsDirty
                 onClicked: DeviceController.SaveSettings()
+            }
+        }
+    }
+
+    function revealExhaustTest(control) {
+        var bottom = control.mapToItem(accelerometerContent, 0, control.height).y + 14
+        if (bottom > accelerometerFlickable.contentY + accelerometerFlickable.height) {
+            accelerometerFlickable.contentY = Math.min(
+                Math.max(0, accelerometerFlickable.contentHeight - accelerometerFlickable.height),
+                bottom - accelerometerFlickable.height
+            )
+        }
+    }
+
+    function openNewProfilePopup() {
+        newProfileNameField.text = ""
+        newProfilePopup.open()
+    }
+
+    function openBoardNamePopup() {
+        boardNamePopupField.text = DeviceController.boardName === "Unassigned body"
+            ? ""
+            : DeviceController.boardName
+        boardNamePopup.open()
+    }
+
+    function saveBoardName() {
+        var boardName = boardNamePopupField.text.trim()
+        if (boardName === "") {
+            return
+        }
+
+        DeviceController.SetBoardName(boardName)
+        boardNamePopup.close()
+    }
+
+    function loadSelectedProfile() {
+        if (profileList.currentIndex < 0) {
+            return
+        }
+
+        DeviceController.LoadProfile(
+            DeviceController.profileNames[profileList.currentIndex]
+        )
+    }
+
+    function createNewProfile() {
+        var profileName = newProfileNameField.text.trim()
+        if (profileName === "") {
+            return
+        }
+
+        DeviceController.SaveProfile(profileName)
+        newProfilePopup.close()
+    }
+
+    Popup {
+        id: newProfilePopup
+        parent: Overlay.overlay
+        width: Math.min(520, parent.width - 24)
+        height: 236
+        x: (parent.width - width) / 2
+        y: 12
+        modal: true
+        focus: true
+        padding: 0
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+
+        onOpened: Qt.callLater(function() {
+            newProfileNameField.forceActiveFocus()
+        })
+        onClosed: {
+            Qt.inputMethod.hide()
+            addProfileButton.forceActiveFocus()
+        }
+
+        Keys.onPressed: function(event) {
+            if (event.key === Qt.Key_Return ||
+                event.key === Qt.Key_Enter) {
+                root.createNewProfile()
+                event.accepted = true
+            } else if (event.key === Qt.Key_Back ||
+                       event.key === Qt.Key_Escape) {
+                newProfilePopup.close()
+                event.accepted = true
+            }
+        }
+
+        Overlay.modal: Rectangle {
+            color: "#99000000"
+        }
+
+        background: Card {
+            radius: 16
+        }
+
+        contentItem: ColumnLayout {
+            anchors.fill: parent
+            anchors.margins: 20
+            spacing: 12
+
+            Text {
+                Layout.fillWidth: true
+                text: "Add saved setup"
+                color: Theme.textPrimary
+                font.family: Theme.fontFamily
+                font.pixelSize: 19
+                font.weight: Font.DemiBold
+            }
+
+            Text {
+                Layout.fillWidth: true
+                text: "Give this vehicle body setup a name. It will be stored locally with the current settings."
+                color: Theme.textSecondary
+                font.family: Theme.fontFamily
+                font.pixelSize: 11
+                wrapMode: Text.WordWrap
+            }
+
+            TextField {
+                id: newProfileNameField
+                Layout.fillWidth: true
+                placeholderText: "Setup name, for example: Supra white"
+                selectByMouse: true
+                EnterKey.type: Qt.EnterKeyDone
+                onAccepted: root.createNewProfile()
+                KeyNavigation.down: cancelNewProfileButton
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 10
+
+                Item { Layout.fillWidth: true }
+
+                ActionButton {
+                    id: cancelNewProfileButton
+                    text: "Cancel"
+                    KeyNavigation.up: newProfileNameField
+                    KeyNavigation.right: createNewProfileButton
+                    onClicked: newProfilePopup.close()
+                }
+
+                ActionButton {
+                    id: createNewProfileButton
+                    text: "Create setup"
+                    primary: true
+                    enabled: newProfileNameField.text.trim() !== ""
+                    KeyNavigation.up: newProfileNameField
+                    KeyNavigation.left: cancelNewProfileButton
+                    onClicked: root.createNewProfile()
+                }
+            }
+        }
+    }
+
+    Popup {
+        id: boardNamePopup
+        parent: Overlay.overlay
+        width: Math.min(520, parent.width - 24)
+        height: 236
+        x: (parent.width - width) / 2
+        y: 12
+        modal: true
+        focus: true
+        padding: 0
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+
+        onOpened: Qt.callLater(function() {
+            boardNamePopupField.forceActiveFocus()
+        })
+        onClosed: {
+            Qt.inputMethod.hide()
+            addBoardButton.forceActiveFocus()
+        }
+
+        Keys.onPressed: function(event) {
+            if (event.key === Qt.Key_Return ||
+                event.key === Qt.Key_Enter) {
+                root.saveBoardName()
+                event.accepted = true
+            } else if (event.key === Qt.Key_Back ||
+                       event.key === Qt.Key_Escape) {
+                boardNamePopup.close()
+                event.accepted = true
+            }
+        }
+
+        Overlay.modal: Rectangle {
+            color: "#99000000"
+        }
+
+        background: Card {
+            radius: 16
+        }
+
+        contentItem: ColumnLayout {
+            anchors.fill: parent
+            anchors.margins: 20
+            spacing: 12
+
+            Text {
+                Layout.fillWidth: true
+                text: "Name connected board"
+                color: Theme.textPrimary
+                font.family: Theme.fontFamily
+                font.pixelSize: 19
+                font.weight: Font.DemiBold
+            }
+
+            Text {
+                Layout.fillWidth: true
+                text: "Give this ESP32 a body name so it is easy to recognize and match with a saved setup."
+                color: Theme.textSecondary
+                font.family: Theme.fontFamily
+                font.pixelSize: 11
+                wrapMode: Text.WordWrap
+            }
+
+            TextField {
+                id: boardNamePopupField
+                Layout.fillWidth: true
+                placeholderText: "Body name, for example: Supra white"
+                selectByMouse: true
+                EnterKey.type: Qt.EnterKeyDone
+                onAccepted: root.saveBoardName()
+                KeyNavigation.down: cancelBoardNameButton
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 10
+
+                Item { Layout.fillWidth: true }
+
+                ActionButton {
+                    id: cancelBoardNameButton
+                    text: "Cancel"
+                    KeyNavigation.up: boardNamePopupField
+                    KeyNavigation.right: applyBoardNameButton
+                    onClicked: boardNamePopup.close()
+                }
+
+                ActionButton {
+                    id: applyBoardNameButton
+                    text: "Apply name"
+                    primary: true
+                    enabled: boardNamePopupField.text.trim() !== ""
+                    KeyNavigation.up: boardNamePopupField
+                    KeyNavigation.left: cancelBoardNameButton
+                    onClicked: root.saveBoardName()
+                }
             }
         }
     }
@@ -1271,81 +2449,6 @@ FocusScope {
         }
     }
 
-    component SettingsValuePanel: Rectangle {
-        id: valuePanel
-
-        property string title: ""
-        property string subtitle: ""
-        property string valueText: ""
-        property color valueColor: Theme.accent
-        property bool highlighted: false
-
-        color: Theme.surface
-        radius: 12
-        border.width: valuePanel.highlighted ? 2 : 0
-        border.color: Theme.accent
-        implicitHeight: 96
-
-        ColumnLayout {
-            anchors.fill: parent
-            anchors.leftMargin: 14
-            anchors.rightMargin: 14
-            anchors.topMargin: 13
-            anchors.bottomMargin: 13
-            spacing: 16
-
-            RowLayout {
-                Layout.fillWidth: true
-                Layout.preferredHeight: 33
-
-                Column {
-                    Layout.fillWidth: true
-                    spacing: 4
-
-                    Text {
-                        text: valuePanel.title
-                        color: Theme.textPrimary
-                        font.family: Theme.fontFamily
-                        font.pixelSize: 14
-                        font.weight: Font.Medium
-                    }
-
-                    Text {
-                        text: valuePanel.subtitle
-                        color: Theme.textSecondary
-                        font.family: Theme.fontFamily
-                        font.pixelSize: 10
-                    }
-                }
-
-                Rectangle {
-                    Layout.preferredWidth: valueChip.implicitWidth + 20
-                    Layout.preferredHeight: 27
-                    radius: 10
-                    color: Theme.background
-
-                    Text {
-                        id: valueChip
-                        anchors.centerIn: parent
-                        text: valuePanel.valueText
-                        color: valuePanel.valueColor
-                        font.family: Theme.fontFamily
-                        font.pixelSize: 11
-                        font.weight: Font.DemiBold
-                    }
-                }
-            }
-
-            default property alias content: valueContent.data
-
-            Item {
-                id: valueContent
-                Layout.fillWidth: true
-                Layout.preferredHeight: 18
-            }
-        }
-    }
-
     component SettingsSliderRow: Rectangle {
         id: settingsRow
 
@@ -1353,9 +2456,13 @@ FocusScope {
         property string subtitle: ""
         property string valueText: ""
         property real value: 0
+        property real from: 0
+        property real to: 100
+        property real stepSize: 1
         property color fillColor: Theme.accent
         property Item upControl: null
         property Item downControl: null
+        property Item rightControl: null
         property alias slider: settingsSlider
 
         signal valueMoved(real value)
@@ -1419,15 +2526,17 @@ FocusScope {
             ValueSlider {
                 id: settingsSlider
                 Layout.fillWidth: true
-                from: 0
-                to: 100
-                stepSize: 1
+                from: settingsRow.from
+                to: settingsRow.to
+                stepSize: settingsRow.stepSize
                 value: settingsRow.value
                 fillColor: settingsRow.fillColor
                 KeyNavigation.up: settingsRow.upControl
                 KeyNavigation.down: settingsRow.downControl
+                KeyNavigation.right: settingsRow.rightControl
 
                 onMoved: settingsRow.valueMoved(value)
+                onDpadMoved: settingsRow.valueMoved(value)
             }
         }
     }
@@ -1510,6 +2619,7 @@ FocusScope {
                 KeyNavigation.down: servoRow.downControl
 
                 onMoved: servoRow.valueMoved(value)
+                onDpadMoved: servoRow.valueMoved(value)
             }
         }
     }

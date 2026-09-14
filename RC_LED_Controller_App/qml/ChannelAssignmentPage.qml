@@ -13,17 +13,45 @@ FocusScope {
 
     signal goBack()
 
+    property string saveFeedback: ""
+
     readonly property var roles: [
         "Unused",
-        "Exhaust light 1",
-        "Exhaust light 2",
+        "Exhaust red",
+        "Exhaust green",
+        "Exhaust blue",
         "Passive lights",
         "Tail lights",
         "Left turning lights",
         "Right turning lights",
         "Headlight servo",
-        "Cooling fans"
+        "Cooling fans",
+        "White reverse lights"
     ]
+
+    readonly property var roleValues: [
+        0, 1, 2, 10, 3, 4, 5, 6, 7, 8, 9
+    ]
+
+    Timer {
+        id: saveFeedbackTimer
+        interval: 3500
+        repeat: false
+        onTriggered: root.saveFeedback = ""
+    }
+
+    Connections {
+        target: DeviceController
+
+        function onSettingsSaveCompleted(uploaded, storedLocally) {
+            root.saveFeedback = !storedLocally
+                ? "Unable to store settings locally"
+                : uploaded
+                    ? "Settings saved locally and uploaded to ESP32"
+                    : "Saved locally; connect controller to upload"
+            saveFeedbackTimer.restart()
+        }
+    }
 
     function focusFirstControl() {
         var firstRow = channelList.itemAtIndex(0)
@@ -33,7 +61,14 @@ FocusScope {
     }
 
     Keys.onPressed: function(event) {
-        if (event.key === Qt.Key_Back ||
+        if (event.key === Qt.Key_X) {
+            DeviceController.ResetDefaults()
+            event.accepted = true
+        } else if (event.key === Qt.Key_Y) {
+            DeviceController.SaveSettings()
+            event.accepted = true
+        } else if (event.key === Qt.Key_A ||
+            event.key === Qt.Key_Back ||
             event.key === Qt.Key_Escape ||
             event.key === Qt.Key_Backspace) {
             root.goBack()
@@ -142,25 +177,13 @@ FocusScope {
                         model: 16
                         boundsBehavior: Flickable.StopAtBounds
 
-                        ScrollBar.vertical: ScrollBar {
-                            policy: ScrollBar.AsNeeded
-                            contentItem: Rectangle {
-                                implicitWidth: 4
-                                radius: 2
-                                color: Theme.track
-                            }
-                            background: Rectangle {
-                                implicitWidth: 4
-                                radius: 2
-                                color: Theme.background
-                            }
-                        }
+                        ScrollBar.vertical: InsetVerticalScrollBar {}
 
                         delegate: Rectangle {
                             id: channelRow
                             required property int index
 
-                            width: channelList.width
+                            width: Math.max(0, channelList.width - 18)
                             height: 48
                             radius: 8
                             activeFocusOnTab: true
@@ -176,6 +199,13 @@ FocusScope {
                             function openRolePopup() {
                                 roleBox.forceActiveFocus()
                                 roleBox.popup.open()
+                            }
+
+                            function syncRoleFromController() {
+                                var roleIndex = root.roleValues.indexOf(
+                                    DeviceController.GetChannelRole(channelRow.index)
+                                )
+                                roleBox.currentIndex = Math.max(0, roleIndex)
                             }
 
                             onActiveFocusChanged: {
@@ -228,8 +258,13 @@ FocusScope {
                                     id: roleBox
                                     Layout.fillWidth: true
                                     model: root.roles
-                                    currentIndex: DeviceController.GetChannelRole(
-                                        channelRow.index
+                                    currentIndex: Math.max(
+                                        0,
+                                        root.roleValues.indexOf(
+                                            DeviceController.GetChannelRole(
+                                                channelRow.index
+                                            )
+                                        )
                                     )
                                     activeFocusOnTab: false
                                     focus: false
@@ -238,10 +273,18 @@ FocusScope {
                                     onActivated: {
                                         DeviceController.SetChannelRole(
                                             channelRow.index,
-                                            currentIndex
+                                            root.roleValues[currentIndex]
                                         )
                                         popup.close()
                                         channelRow.forceActiveFocus()
+                                    }
+
+                                    Connections {
+                                        target: DeviceController
+
+                                        function onConfigurationChanged() {
+                                            channelRow.syncRoleFromController()
+                                        }
                                     }
 
                                     function selectRole(aRole) {
@@ -252,7 +295,7 @@ FocusScope {
                                         currentIndex = role
                                         DeviceController.SetChannelRole(
                                             channelRow.index,
-                                            role
+                                            root.roleValues[role]
                                         )
                                     }
 
@@ -267,7 +310,8 @@ FocusScope {
                                     }
 
                                     Keys.onPressed: function(event) {
-                                        if (event.key === Qt.Key_Back ||
+                                        if (event.key === Qt.Key_A ||
+                                            event.key === Qt.Key_Back ||
                                             event.key === Qt.Key_Escape ||
                                             event.key === Qt.Key_Backspace) {
                                             popup.close()
@@ -316,12 +360,16 @@ FocusScope {
                                         id: roleDelegate
                                         width: roleBox.width
                                         height: 34
-                                         highlighted: rolePopup.pendingIndex === index
+                                        property bool activeRole:
+                                            rolePopup.pendingIndex === index
+                                        highlighted: activeRole
 
                                         contentItem: Text {
                                             leftPadding: 10
                                             text: modelData
-                                            color: Theme.textPrimary
+                                            color: roleDelegate.activeRole
+                                                ? Theme.textPrimary
+                                                : Theme.textSecondary
                                             font.family: Theme.fontFamily
                                             font.pixelSize: 11
                                             verticalAlignment: Text.AlignVCenter
@@ -329,9 +377,20 @@ FocusScope {
 
                                         background: Rectangle {
                                             radius: 7
-                                            color: roleDelegate.highlighted
-                                                ? Theme.surface
-                                                : Theme.panel
+                                            color: "transparent"
+                                            border.width: 0
+                                            border.color: Theme.accent
+
+                                            Rectangle {
+                                                anchors.left: parent.left
+                                                anchors.top: parent.top
+                                                anchors.bottom: parent.bottom
+                                                width: 3
+                                                radius: 2
+                                                color: roleDelegate.activeRole
+                                                    ? Theme.accent
+                                                    : "transparent"
+                                            }
                                         }
                                     }
 
@@ -351,18 +410,27 @@ FocusScope {
                                                  roleList.currentIndex,
                                                  ListView.Contain
                                              )
-                                             roleList.forceActiveFocus()
+                                              Qt.callLater(function() {
+                                                  roleList.forceActiveFocus()
+                                              })
                                          }
                                          onClosed: channelRow.forceActiveFocus()
 
                                          Keys.priority: Keys.BeforeItem
                                          Keys.onPressed: function(event) {
-                                             if (event.key === Qt.Key_Up ||
-                                                 event.key === Qt.Key_Left) {
+                                              var nativeKey = event.nativeVirtualKey !== undefined
+                                                  ? event.nativeVirtualKey
+                                                  : event.nativeScanCode
+                                              if (event.key === Qt.Key_Up ||
+                                                  event.key === Qt.Key_Left ||
+                                                  nativeKey === 19 ||
+                                                  nativeKey === 21) {
                                                  roleList.moveRole(-1)
                                                  event.accepted = true
-                                             } else if (event.key === Qt.Key_Down ||
-                                                        event.key === Qt.Key_Right) {
+                                              } else if (event.key === Qt.Key_Down ||
+                                                         event.key === Qt.Key_Right ||
+                                                         nativeKey === 20 ||
+                                                         nativeKey === 22) {
                                                  roleList.moveRole(1)
                                                  event.accepted = true
                                              }
@@ -381,6 +449,27 @@ FocusScope {
                                                 ? roleBox.delegateModel
                                                 : null
                                              currentIndex: 0
+                                             highlightFollowsCurrentItem: true
+                                             highlightMoveDuration: 0
+
+                                             highlight: Rectangle {
+                                                 width: Math.max(0, roleList.width - 18)
+                                                 height: 34
+                                                 radius: 7
+                                                 color: Theme.accentMuted
+                                                 border.width: 2
+                                                 border.color: Theme.accent
+                                                 z: -1
+
+                                                 Rectangle {
+                                                     anchors.left: parent.left
+                                                     anchors.top: parent.top
+                                                     anchors.bottom: parent.bottom
+                                                     width: 3
+                                                     radius: 2
+                                                     color: Theme.accent
+                                                 }
+                                             }
 
                                              function moveRole(delta) {
                                                  var next = Math.max(
@@ -396,32 +485,40 @@ FocusScope {
                                                      next,
                                                      ListView.Contain
                                                  )
-                                             }
+                                                  roleList.forceActiveFocus()
+                                              }
 
-                                             Keys.onPressed: function(event) {
-                                                 if (event.key === Qt.Key_Up ||
-                                                     event.key === Qt.Key_Left) {
+                                              Keys.onPressed: function(event) {
+                                                  var nativeKey = event.nativeVirtualKey !== undefined
+                                                      ? event.nativeVirtualKey
+                                                      : event.nativeScanCode
+                                                  if (event.key === Qt.Key_Up ||
+                                                      event.key === Qt.Key_Left ||
+                                                      nativeKey === 19 ||
+                                                      nativeKey === 21) {
                                                      roleList.moveRole(-1)
                                                      event.accepted = true
-                                                 } else if (event.key === Qt.Key_Down ||
-                                                            event.key === Qt.Key_Right) {
+                                                  } else if (event.key === Qt.Key_Down ||
+                                                             event.key === Qt.Key_Right ||
+                                                             nativeKey === 20 ||
+                                                             nativeKey === 22) {
                                                      roleList.moveRole(1)
                                                      event.accepted = true
                                                  } else if (event.key === Qt.Key_Return ||
                                                      event.key === Qt.Key_Enter ||
                                                      event.key === Qt.Key_Space ||
-                                                     event.key === Qt.Key_A ||
-                                                    event.key === Qt.Key_B) {
+                                                     event.key === Qt.Key_B) {
                                                     roleBox.currentIndex =
                                                         roleList.currentIndex
                                                     DeviceController.SetChannelRole(
                                                         channelRow.index,
-                                                        roleList.currentIndex
+                                                        root.roleValues[roleList.currentIndex]
                                                     )
                                                     rolePopup.close()
                                                     channelRow.forceActiveFocus()
                                                     event.accepted = true
-                                                } else if (event.key === Qt.Key_Back ||
+                                                } else if (event.key === Qt.Key_A ||
+                                                           event.key === Qt.Key_Back ||
                                                            event.key === Qt.Key_Escape ||
                                                            event.key === Qt.Key_Backspace) {
                                                     rolePopup.close()
@@ -430,9 +527,7 @@ FocusScope {
                                                 }
                                             }
 
-                                            ScrollBar.vertical: ScrollBar {
-                                                policy: ScrollBar.AsNeeded
-                                            }
+                                            ScrollBar.vertical: InsetVerticalScrollBar {}
                                         }
 
                                         background: Rectangle {
@@ -455,12 +550,22 @@ FocusScope {
             Layout.preferredHeight: 28
 
             Text {
-                text: DeviceController.settingsDirty
-                    ? "Unsaved changes"
-                    : "Assignments are stored on the ESP32"
-                color: DeviceController.settingsDirty
-                    ? Theme.warning
-                    : Theme.textSecondary
+                text: root.saveFeedback !== ""
+                    ? root.saveFeedback
+                    : DeviceController.settingsDirty
+                        ? "Unsaved changes — press Y to save"
+                        : DeviceController.settingsSyncStatus !== ""
+                            ? DeviceController.settingsSyncStatus
+                            : DeviceController.settingsUploadPending
+                                ? "Saved locally; waiting to upload"
+                                : "Assignments are stored on the ESP32"
+                color: root.saveFeedback !== ""
+                    ? (root.saveFeedback === "Settings saved locally and uploaded to ESP32"
+                        ? Theme.green
+                        : Theme.warning)
+                    : DeviceController.settingsDirty
+                        ? Theme.warning
+                        : Theme.textSecondary
                 font.family: Theme.fontFamily
                 font.pixelSize: 10
             }

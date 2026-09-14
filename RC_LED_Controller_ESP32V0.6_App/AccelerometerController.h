@@ -54,6 +54,8 @@ public:
         const FAccelerometerAxisConfiguration& aAxisConfigurationRef
     );
 
+    void SetForwardToleranceG(float aToleranceG);
+
     bool CalibrateStationary(
         uint16_t aSampleCount = 200,
         uint16_t aSampleDelayMs = 5
@@ -66,6 +68,7 @@ public:
     bool IsConnected() const;
     bool IsCalibrated() const;
     uint8_t GetDeviceAddress() const;
+    uint8_t GetWhoAmI() const;
 
     void ResetFilter();
 
@@ -105,6 +108,7 @@ private:
 private:
     TwoWire* WirePtr = nullptr;
     uint8_t DeviceAddress = 0x68;
+    uint8_t DeviceWhoAmI = 0;
 
     FAccelerometerAxisConfiguration AxisConfiguration;
     FAccelerationState AccelerationState;
@@ -116,6 +120,7 @@ private:
     float StationaryGyroscopeOffsetXDps = 0.0f;
     float StationaryGyroscopeOffsetYDps = 0.0f;
     float StationaryGyroscopeOffsetZDps = 0.0f;
+    float ForwardToleranceG = 0.02f;
 
     uint32_t LastSampleTimeMs = 0;
 

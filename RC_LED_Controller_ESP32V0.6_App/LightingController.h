@@ -29,6 +29,9 @@ public:
     FLightingController();
 
     bool Begin();
+    bool IsConnected() const;
+    uint8_t GetDeviceAddress() const;
+    uint8_t ReadMode1Register() const;
 
     void ApplyConfiguration(
         const FControllerConfiguration& aConfigurationRef
@@ -40,11 +43,22 @@ public:
     );
 
     void TriggerExhaustTest(
-        uint32_t aCurrentTimeMs
+        uint32_t aCurrentTimeMs,
+        uint8_t aRole = 0
     );
+
+    // Debug-only direct PCA9685 servo output. This bypasses channel roles
+    // and remains active until ClearServoTestPosition() is called.
+    void SetServoTestPosition(
+        uint8_t aChannel,
+        uint16_t aPulse
+    );
+
+    void ClearServoTestPosition();
 
     ETurnDirection GetActiveTurnDirection() const;
     bool IsBrakeOrReverseActive() const;
+    bool IsReverseActive() const;
     bool IsExhaustPulseActive() const;
 
 private:
@@ -92,10 +106,16 @@ private:
 
     void SetLedBrightness(
         uint8_t aChannel,
-        uint16_t aBrightness
+        uint16_t aBrightness,
+        bool aInvert = true
     );
 
     void SetRoleBrightness(
+        uint8_t aRole,
+        uint16_t aBrightness
+    );
+
+    void SetExhaustRoleBrightness(
         uint8_t aRole,
         uint16_t aBrightness
     );
@@ -111,11 +131,25 @@ private:
         ETurnDirection::None;
 
     bool bBrakeOrReverseActive = false;
+    bool bReverseActive = false;
+    bool bReverseArmed = false;
+    bool bReverseModeEnabled = false;
     bool bExhaustPulseActive = false;
     bool bManualExhaustPulseActive = false;
 
+    bool bServoTestOverrideActive = false;
+    uint8_t ServoTestChannel = 0;
+    uint16_t ServoTestPulse = 0;
+
     int16_t PreviousThrottlePercent = 0;
-    float PreviousFilteredForwardAccelerationG = 0.0f;
+    bool bExhaustInputValid = false;
+    bool bHighThrottleActive = false;
+    bool bAccelerationTriggerArmed = true;
+    uint8_t ExhaustTestRole = 0;
+    uint32_t ThrottleSampleTimeMs = 0;
+    uint32_t HighThrottleStartTimeMs = 0;
+    uint32_t ExhaustBurstSequence = 0;
+    uint32_t ExhaustBurstIntervalMs = 500;
 
     uint16_t CurrentRearBrightness = 0;
     uint16_t CurrentLeftTurnBrightness = 0;
@@ -128,4 +162,5 @@ private:
     uint32_t LastExhaustTriggerTimeMs = 0;
     uint32_t ExhaustPulseStartTimeMs = 0;
     uint32_t ExhaustPulseDurationMs = 0;
+    bool bConnected = false;
 };

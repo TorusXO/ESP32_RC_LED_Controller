@@ -1,7 +1,7 @@
 # ESP32 RC LED Controller V0.6
 
 This firmware adds the structured Bluetooth protocol used by the Qt app and the
-first working two-color exhaust effect.
+first working RGB exhaust effect.
 
 ## Confirmed hardware mapping
 
@@ -13,9 +13,10 @@ first working two-color exhaust effect.
 | I²C SCL | ESP32 GPIO22 |
 | MPU-compatible sensor | I²C `0x68`, IDs `0x68`, `0x70`, or `0x71` |
 | PCA9685 | I²C `0x40` |
-| Yellow exhaust LED | PCA9685 channel 0 |
-| Blue exhaust LED | PCA9685 channel 1 |
-| Passive LEDs | PCA9685 channels 2–12 |
+| Exhaust red channel | PCA9685 channel 0 |
+| Exhaust green channel | PCA9685 channel 1 |
+| Exhaust blue channel | PCA9685 channel 2 |
+| Passive LEDs | PCA9685 channels 3–12 |
 | Rear red LED | PCA9685 channel 13 |
 | Left turn LED | PCA9685 channel 14 |
 | Right turn LED | PCA9685 channel 15 |
@@ -25,14 +26,26 @@ internal pull-up.
 
 ## Exhaust effect
 
-- A rapid forward-throttle rise creates a short flame immediately.
-- Crossing the configured forward-acceleration threshold while forward
-  throttle is active creates a longer flame.
-- A 140 ms cooldown rejects repeated vibration triggers.
-- Blue is the short inner ignition color.
-- Yellow is the longer outer flame and fades through the pulse.
-- Reverse throttle does not trigger the effect.
-- The app's test command produces a 180 ms pulse without moving the car.
+- Steady low throttle stays dark, even with accelerometer vibration.
+- At 65% forward throttle, sustained load starts spaced 60–129 ms pops after
+  250 ms. The high-load state releases below 55%; varied 420–849 ms gaps keep
+  each burst distinct.
+- A rise of at least 25 percentage points over a roughly 100 ms window triggers
+  a short pop once throttle reaches 35%. Dropping at least 30 points from 65%
+  or more produces a brief lift-off pop, including a release to neutral.
+- Acceleration spikes require at least 40% forward throttle. The configurable
+  threshold must reset below 60% before it can trigger again. A 240 ms minimum
+  cooldown prevents continuous retriggering.
+- Blue ignition fades into orange/red, with dark intervals between bursts.
+- Reverse/braking input and lost CH2 signal cancel automatic exhaust output.
+  Reconnecting the RC signal does not count as a throttle blip.
+- These are throttle-based visual effects; no RPM or engine-load sensor is used.
+- The app's flame preview lasts 180 ms. Red-only, green-only, and blue-only
+  tests hold one color at full brightness for two seconds, suppress the other
+  exhaust colors, and can be replaced or stopped early. Tests follow the board's
+  saved channel roles, bypass exhaust enable/brightness, and do not save settings.
+- PCA9685 outputs use totem-pole mode and non-inverted RGB PWM to drive the
+  common-ground diode. Existing non-exhaust LED roles retain inverted PWM.
 
 The default acceleration threshold is `0.06 g`. Adjust it from live driving
 logs and save it from the app.

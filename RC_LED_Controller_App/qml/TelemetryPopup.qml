@@ -129,9 +129,11 @@ Popup {
                 primaryValue:
                     DeviceController.exhaustPulseActive
                         ? "Exhaust pulse"
-                        : DeviceController.brakeActive
-                            ? "Brake"
-                            : DeviceController.turnDirection
+                        : DeviceController.reverseActive
+                            ? "Reverse"
+                            : DeviceController.brakeActive
+                                ? "Brake"
+                                : DeviceController.turnDirection
 
                 details:
                     DeviceController.activeLightsEnabled

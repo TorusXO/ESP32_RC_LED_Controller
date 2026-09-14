@@ -8,10 +8,14 @@
 #include <QBluetoothSocket>
 #include <QBluetoothUuid>
 #include <QCoreApplication>
+#include <QJsonDocument>
+#include <QJsonArray>
+#include <QJsonObject>
 #include <QMetaEnum>
 #include <QPermission>
 #include <QList>
 #include <QPair>
+#include <QSettings>
 #include <QTimer>
 
 namespace
@@ -43,15 +47,43 @@ FDeviceController::FDeviceController(
     , ReconnectTimerPtr(
         new QTimer(this)
     )
+    , SettingsUploadTimeoutTimerPtr(
+        new QTimer(this)
+    )
 {
     ReconnectTimerPtr->setSingleShot(true);
     ReconnectTimerPtr->setInterval(2000);
+
+    SettingsUploadTimeoutTimerPtr->setSingleShot(true);
+    SettingsUploadTimeoutTimerPtr->setInterval(5000);
 
     connect(
         ReconnectTimerPtr,
         &QTimer::timeout,
         this,
         &FDeviceController::StartScan
+    );
+
+    connect(
+        SettingsUploadTimeoutTimerPtr,
+        &QTimer::timeout,
+        this,
+        [this]()
+        {
+            if (!bSettingsUploadInProgress)
+            {
+                return;
+            }
+
+            bSettingsUploadInProgress = false;
+            bSettingsUploadPending = true;
+            SettingsSyncStatus =
+                QStringLiteral(
+                    "Upload timed out; settings remain saved locally"
+                );
+            emit ConfigurationChanged();
+            emit SettingsSaveCompleted(false, true);
+        }
     );
 
     connect(
@@ -125,6 +157,8 @@ FDeviceController::FDeviceController(
             HandleSocketError();
         }
     );
+
+    LoadLocalSettings();
 }
 
 FDeviceController::~FDeviceController() = default;
@@ -152,6 +186,59 @@ const QString& FDeviceController::GetDeviceName() const
 const QString& FDeviceController::GetFirmwareVersion() const
 {
     return FirmwareVersion;
+}
+
+const QString& FDeviceController::GetBoardName() const
+{
+    return BoardName;
+}
+
+const QString& FDeviceController::GetBoardId() const
+{
+    return BoardId;
+}
+
+QStringList FDeviceController::GetProfileNames() const
+{
+    QSettings LocalSettings;
+    LocalSettings.beginGroup(QStringLiteral("profiles"));
+    const QStringList ProfileNames = LocalSettings.childGroups();
+    LocalSettings.endGroup();
+    return ProfileNames;
+}
+
+const QString& FDeviceController::GetActiveProfileName() const
+{
+    return ActiveProfileName;
+}
+
+QString FDeviceController::GetMatchingProfileName() const
+{
+    if (BoardId.isEmpty() || BoardId == QStringLiteral("--"))
+    {
+        return QString();
+    }
+
+    QSettings LocalSettings;
+    LocalSettings.beginGroup(QStringLiteral("profiles"));
+
+    for (const QString& ProfileName : LocalSettings.childGroups())
+    {
+        LocalSettings.beginGroup(ProfileName);
+        const QString ProfileBoardId = LocalSettings.value(
+            QStringLiteral("boardId")
+        ).toString();
+        LocalSettings.endGroup();
+
+        if (ProfileBoardId == BoardId)
+        {
+            LocalSettings.endGroup();
+            return ProfileName;
+        }
+    }
+
+    LocalSettings.endGroup();
+    return QString();
 }
 
 bool FDeviceController::ArePassiveLightsEnabled() const
@@ -189,6 +276,21 @@ double FDeviceController::GetTriggerThresholdG() const
     return TriggerThresholdG;
 }
 
+int FDeviceController::GetAccelerometerForwardAxis() const
+{
+    return AccelerometerForwardAxis;
+}
+
+bool FDeviceController::IsAccelerometerForwardInverted() const
+{
+    return bAccelerometerForwardInverted;
+}
+
+double FDeviceController::GetAccelerometerToleranceG() const
+{
+    return AccelerometerToleranceG;
+}
+
 int FDeviceController::GetActiveBrightnessPercent() const
 {
     return ActiveBrightnessPercent;
@@ -206,6 +308,7 @@ int FDeviceController::GetFanSpeedPercent() const
 
 int FDeviceController::GetExhaustLight1Channel() const { return ExhaustLight1Channel; }
 int FDeviceController::GetExhaustLight2Channel() const { return ExhaustLight2Channel; }
+int FDeviceController::GetExhaustLight3Channel() const { return ExhaustLight3Channel; }
 int FDeviceController::GetPassiveLightsChannel() const { return PassiveLightsChannel; }
 int FDeviceController::GetTailLightsChannel() const { return TailLightsChannel; }
 int FDeviceController::GetLeftTurnLightsChannel() const { return LeftTurnLightsChannel; }
@@ -228,6 +331,16 @@ int FDeviceController::GetChannelRole(int aChannel) const
 bool FDeviceController::AreSettingsDirty() const
 {
     return bSettingsDirty;
+}
+
+bool FDeviceController::IsSettingsUploadPending() const
+{
+    return bSettingsUploadPending;
+}
+
+const QString& FDeviceController::GetSettingsSyncStatus() const
+{
+    return SettingsSyncStatus;
 }
 
 int FDeviceController::GetSteeringPulseUs() const
@@ -295,9 +408,116 @@ bool FDeviceController::IsBrakeActive() const
     return bBrakeActive;
 }
 
+bool FDeviceController::IsReverseActive() const
+{
+    return bReverseActive;
+}
+
 bool FDeviceController::IsExhaustPulseActive() const
 {
     return bExhaustPulseActive;
+}
+
+bool FDeviceController::HasSteeringSignal() const
+{
+    return bSteeringSignalPresent;
+}
+
+bool FDeviceController::HasThrottleSignal() const
+{
+    return bThrottleSignalPresent;
+}
+
+bool FDeviceController::IsPcaConnected() const
+{
+    return bPcaConnected;
+}
+
+int FDeviceController::GetPcaAddress() const
+{
+    return PcaAddress;
+}
+
+int FDeviceController::GetPcaMode1() const
+{
+    return PcaMode1;
+}
+
+bool FDeviceController::IsAccelerometerConnected() const
+{
+    return bAccelerometerConnected;
+}
+
+bool FDeviceController::IsAccelerometerCalibrated() const
+{
+    return bAccelerometerCalibrated;
+}
+
+int FDeviceController::GetAccelerometerAddress() const
+{
+    return AccelerometerAddress;
+}
+
+int FDeviceController::GetAccelerometerWhoAmI() const
+{
+    return AccelerometerWhoAmI;
+}
+
+bool FDeviceController::AreDiagnosticsPending() const
+{
+    return bDiagnosticsPending;
+}
+
+const QString& FDeviceController::GetDiagnosticsSummary() const
+{
+    return DiagnosticsSummary;
+}
+
+QString FDeviceController::GetPcaStatusText() const
+{
+    return bPcaConnected
+        ? QStringLiteral("OK at 0x%1 (MODE1 0x%2)")
+            .arg(PcaAddress, 2, 16, QLatin1Char('0'))
+            .arg(PcaMode1, 2, 16, QLatin1Char('0'))
+        : QStringLiteral("NOT RESPONDING at 0x%1")
+            .arg(PcaAddress, 2, 16, QLatin1Char('0'));
+}
+
+QString FDeviceController::GetAccelerometerStatusText() const
+{
+    return bAccelerometerConnected
+        ? QStringLiteral("OK at 0x%1 (WHO_AM_I 0x%2)%3")
+            .arg(AccelerometerAddress, 2, 16, QLatin1Char('0'))
+            .arg(AccelerometerWhoAmI, 2, 16, QLatin1Char('0'))
+            .arg(bAccelerometerCalibrated ? QStringLiteral(", calibrated") : QString())
+        : QStringLiteral("NOT RESPONDING at 0x%1")
+            .arg(AccelerometerAddress, 2, 16, QLatin1Char('0'));
+}
+
+QString FDeviceController::GetSteeringSignalStatus() const
+{
+    return bSteeringSignalPresent ? QStringLiteral("OK") : QStringLiteral("NO SIGNAL");
+}
+
+QString FDeviceController::GetThrottleSignalStatus() const
+{
+    return bThrottleSignalPresent ? QStringLiteral("OK") : QStringLiteral("NO SIGNAL");
+}
+
+QString FDeviceController::GetDeviceStatusSummary() const
+{
+    const QString Status =
+        !bConnected
+            ? ConnectionStatus
+            : QStringLiteral("ESP32 OK  •  PCA %1  •  MPU %2  •  CH1 %3  •  CH2 %4")
+                .arg(bPcaConnected ? QStringLiteral("OK") : QStringLiteral("OFFLINE"))
+                .arg(bAccelerometerConnected ? QStringLiteral("OK") : QStringLiteral("OFFLINE"))
+                .arg(GetSteeringSignalStatus())
+                .arg(GetThrottleSignalStatus());
+
+    return bSettingsDirty
+        ? QStringLiteral("Unsaved changes  •  ") + Status
+        : Status;
 }
 
 void FDeviceController::StartScan()
@@ -483,6 +703,55 @@ void FDeviceController::SetPendingTriggerThresholdG(
     MarkSettingsDirty();
 }
 
+void FDeviceController::SetPendingAccelerometerForwardAxis(
+    int aAxis
+)
+{
+    const int ClampedAxis = qBound(0, aAxis, 2);
+
+    if (AccelerometerForwardAxis == ClampedAxis)
+    {
+        return;
+    }
+
+    AccelerometerForwardAxis = ClampedAxis;
+    MarkSettingsDirty();
+}
+
+void FDeviceController::SetPendingAccelerometerForwardInverted(
+    bool aInverted
+)
+{
+    if (bAccelerometerForwardInverted == aInverted)
+    {
+        return;
+    }
+
+    bAccelerometerForwardInverted = aInverted;
+    MarkSettingsDirty();
+}
+
+void FDeviceController::SetPendingAccelerometerToleranceG(
+    double aToleranceG
+)
+{
+    const double ClampedToleranceG =
+        qBound(0.0, aToleranceG, 0.20);
+
+    if (
+        qAbs(
+            AccelerometerToleranceG -
+            ClampedToleranceG
+        ) < 0.0001
+    )
+    {
+        return;
+    }
+
+    AccelerometerToleranceG = ClampedToleranceG;
+    MarkSettingsDirty();
+}
+
 void FDeviceController::SetPendingActiveBrightnessPercent(
     int aBrightnessPercent
 )
@@ -551,6 +820,11 @@ void FDeviceController::SetExhaustLight2Channel(int aChannel)
     ExhaustLight2Channel = qBound(-1, aChannel, 15); MarkSettingsDirty();
 }
 
+void FDeviceController::SetExhaustLight3Channel(int aChannel)
+{
+    ExhaustLight3Channel = qBound(-1, aChannel, 15); MarkSettingsDirty();
+}
+
 void FDeviceController::SetPassiveLightsChannel(int aChannel)
 {
     PassiveLightsChannel = qBound(-1, aChannel, 15); MarkSettingsDirty();
@@ -574,6 +848,22 @@ void FDeviceController::SetRightTurnLightsChannel(int aChannel)
 void FDeviceController::SetHeadlightServoChannel(int aChannel)
 {
     HeadlightServoChannel = qBound(-1, aChannel, 15); MarkSettingsDirty();
+}
+
+void FDeviceController::SetBoardName(const QString& aBoardName)
+{
+    QString NewBoardName = aBoardName.trimmed();
+    NewBoardName.replace(',', ' ');
+    NewBoardName = NewBoardName.left(31);
+
+    if (NewBoardName.isEmpty() || BoardName == NewBoardName)
+    {
+        return;
+    }
+
+    BoardName = NewBoardName;
+    MarkSettingsDirty();
+    emit DeviceInformationChanged();
 }
 
 void FDeviceController::SetPendingServoClosedPulseUs(int aPulseUs)
@@ -612,7 +902,7 @@ void FDeviceController::ZeroServo()
 
 void FDeviceController::SetChannelRole(int aChannel, int aRole)
 {
-    if (aChannel < 0 || aChannel > 15 || aRole < 0 || aRole > 8)
+    if (aChannel < 0 || aChannel > 15 || aRole < 0 || aRole > 10)
     {
         return;
     }
@@ -624,16 +914,531 @@ void FDeviceController::SetChannelRole(int aChannel, int aRole)
     }
 }
 
-void FDeviceController::SaveSettings()
+QJsonObject FDeviceController::BuildSettingsObject() const
 {
-    if (
-        !bConnected ||
-        BluetoothSocketPtr->state() !=
-        QBluetoothSocket::SocketState::ConnectedState
-    )
+    QJsonObject SettingsObject;
+    SettingsObject[QStringLiteral("passiveLightsEnabled")] = bPassiveLightsEnabled;
+    SettingsObject[QStringLiteral("activeLightsEnabled")] = bActiveLightsEnabled;
+    SettingsObject[QStringLiteral("exhaustEnabled")] = bExhaustEnabled;
+    SettingsObject[QStringLiteral("headlightsOpen")] = bHeadlightsOpen;
+    SettingsObject[QStringLiteral("fansEnabled")] = bFansEnabled;
+    SettingsObject[QStringLiteral("accelerometerEnabled")] = bAccelerometerEnabled;
+    SettingsObject[QStringLiteral("triggerThresholdG")] = TriggerThresholdG;
+    SettingsObject[QStringLiteral("accelerometerForwardAxis")] = AccelerometerForwardAxis;
+    SettingsObject[QStringLiteral("accelerometerForwardInverted")] = bAccelerometerForwardInverted;
+    SettingsObject[QStringLiteral("accelerometerToleranceG")] = AccelerometerToleranceG;
+    SettingsObject[QStringLiteral("activeBrightnessPercent")] = ActiveBrightnessPercent;
+    SettingsObject[QStringLiteral("dimBrightnessPercent")] = DimBrightnessPercent;
+    SettingsObject[QStringLiteral("fanSpeedPercent")] = FanSpeedPercent;
+    SettingsObject[QStringLiteral("servoClosedPulseUs")] = ServoClosedPulseUs;
+    SettingsObject[QStringLiteral("servoOpenPulseUs")] = ServoOpenPulseUs;
+    SettingsObject[QStringLiteral("exhaustLight1Channel")] = ExhaustLight1Channel;
+    SettingsObject[QStringLiteral("exhaustLight2Channel")] = ExhaustLight2Channel;
+    SettingsObject[QStringLiteral("exhaustLight3Channel")] = ExhaustLight3Channel;
+    SettingsObject[QStringLiteral("passiveLightsChannel")] = PassiveLightsChannel;
+    SettingsObject[QStringLiteral("tailLightsChannel")] = TailLightsChannel;
+    SettingsObject[QStringLiteral("leftTurnLightsChannel")] = LeftTurnLightsChannel;
+    SettingsObject[QStringLiteral("rightTurnLightsChannel")] = RightTurnLightsChannel;
+    SettingsObject[QStringLiteral("headlightServoChannel")] = HeadlightServoChannel;
+
+    QJsonArray RoleArray;
+    for (const int Role : ChannelRoles)
+    {
+        RoleArray.append(Role);
+    }
+    SettingsObject[QStringLiteral("channelRoles")] = RoleArray;
+
+    return SettingsObject;
+}
+
+bool FDeviceController::ApplySettingsObject(
+    const QJsonObject& aSettingsObject
+)
+{
+    if (aSettingsObject.isEmpty())
+    {
+        return false;
+    }
+
+    bPassiveLightsEnabled = aSettingsObject.value(
+        QStringLiteral("passiveLightsEnabled")
+    ).toBool(bPassiveLightsEnabled);
+    bActiveLightsEnabled = aSettingsObject.value(
+        QStringLiteral("activeLightsEnabled")
+    ).toBool(bActiveLightsEnabled);
+    bExhaustEnabled = aSettingsObject.value(
+        QStringLiteral("exhaustEnabled")
+    ).toBool(bExhaustEnabled);
+    bHeadlightsOpen = aSettingsObject.value(
+        QStringLiteral("headlightsOpen")
+    ).toBool(bHeadlightsOpen);
+    bFansEnabled = aSettingsObject.value(
+        QStringLiteral("fansEnabled")
+    ).toBool(bFansEnabled);
+    bAccelerometerEnabled = aSettingsObject.value(
+        QStringLiteral("accelerometerEnabled")
+    ).toBool(bAccelerometerEnabled);
+    TriggerThresholdG = qBound(
+        0.01,
+        aSettingsObject.value(QStringLiteral("triggerThresholdG")).toDouble(TriggerThresholdG),
+        0.50
+    );
+    AccelerometerForwardAxis = qBound(
+        0,
+        aSettingsObject.value(QStringLiteral("accelerometerForwardAxis")).toInt(AccelerometerForwardAxis),
+        2
+    );
+    bAccelerometerForwardInverted = aSettingsObject.value(
+        QStringLiteral("accelerometerForwardInverted")
+    ).toBool(bAccelerometerForwardInverted);
+    AccelerometerToleranceG = qBound(
+        0.0,
+        aSettingsObject.value(QStringLiteral("accelerometerToleranceG")).toDouble(AccelerometerToleranceG),
+        0.20
+    );
+    ActiveBrightnessPercent = qBound(
+        0,
+        aSettingsObject.value(QStringLiteral("activeBrightnessPercent")).toInt(ActiveBrightnessPercent),
+        100
+    );
+    DimBrightnessPercent = qBound(
+        0,
+        aSettingsObject.value(QStringLiteral("dimBrightnessPercent")).toInt(DimBrightnessPercent),
+        100
+    );
+    FanSpeedPercent = qBound(
+        0,
+        aSettingsObject.value(QStringLiteral("fanSpeedPercent")).toInt(FanSpeedPercent),
+        100
+    );
+    ServoClosedPulseUs = qBound(
+        0,
+        aSettingsObject.value(QStringLiteral("servoClosedPulseUs")).toInt(ServoClosedPulseUs),
+        4095
+    );
+    ServoOpenPulseUs = qBound(
+        0,
+        aSettingsObject.value(QStringLiteral("servoOpenPulseUs")).toInt(ServoOpenPulseUs),
+        4095
+    );
+
+    const auto ParseChannel = [](int aDefault, const QJsonValue& aValue) {
+        return qBound(-1, aValue.toInt(aDefault), 15);
+    };
+
+    ExhaustLight1Channel = ParseChannel(
+        ExhaustLight1Channel,
+        aSettingsObject.value(QStringLiteral("exhaustLight1Channel"))
+    );
+    ExhaustLight2Channel = ParseChannel(
+        ExhaustLight2Channel,
+        aSettingsObject.value(QStringLiteral("exhaustLight2Channel"))
+    );
+    ExhaustLight3Channel = ParseChannel(
+        ExhaustLight3Channel,
+        aSettingsObject.value(QStringLiteral("exhaustLight3Channel"))
+    );
+    PassiveLightsChannel = ParseChannel(
+        PassiveLightsChannel,
+        aSettingsObject.value(QStringLiteral("passiveLightsChannel"))
+    );
+    TailLightsChannel = ParseChannel(
+        TailLightsChannel,
+        aSettingsObject.value(QStringLiteral("tailLightsChannel"))
+    );
+    LeftTurnLightsChannel = ParseChannel(
+        LeftTurnLightsChannel,
+        aSettingsObject.value(QStringLiteral("leftTurnLightsChannel"))
+    );
+    RightTurnLightsChannel = ParseChannel(
+        RightTurnLightsChannel,
+        aSettingsObject.value(QStringLiteral("rightTurnLightsChannel"))
+    );
+    HeadlightServoChannel = ParseChannel(
+        HeadlightServoChannel,
+        aSettingsObject.value(QStringLiteral("headlightServoChannel"))
+    );
+
+    const QJsonArray RoleArray = aSettingsObject.value(
+        QStringLiteral("channelRoles")
+    ).toArray();
+    for (int Channel = 0; Channel < ChannelRoles.size(); ++Channel)
+    {
+        if (Channel < RoleArray.size())
+        {
+            ChannelRoles[Channel] = qBound(
+                0,
+                RoleArray.at(Channel).toInt(ChannelRoles[Channel]),
+                10
+            );
+        }
+    }
+
+    bServoZeroed = false;
+    return true;
+}
+
+QString FDeviceController::NormalizeProfileName(
+    const QString& aProfileName
+) const
+{
+    QString ProfileName = aProfileName.trimmed();
+    ProfileName.replace('/', '_');
+    ProfileName.replace('\\', '_');
+    return ProfileName.left(48);
+}
+
+void FDeviceController::SaveProfile(const QString& aProfileName)
+{
+    const QString ProfileName = NormalizeProfileName(aProfileName);
+    if (ProfileName.isEmpty())
     {
         return;
     }
+
+    QSettings LocalSettings;
+    LocalSettings.beginGroup(QStringLiteral("profiles"));
+    LocalSettings.beginGroup(ProfileName);
+    LocalSettings.setValue(
+        QStringLiteral("settings"),
+        QString::fromUtf8(
+            QJsonDocument(BuildSettingsObject()).toJson(
+                QJsonDocument::Compact
+            )
+        )
+    );
+    LocalSettings.setValue(QStringLiteral("boardId"), BoardId);
+    LocalSettings.setValue(QStringLiteral("boardName"), BoardName);
+    LocalSettings.endGroup();
+    LocalSettings.endGroup();
+    LocalSettings.sync();
+
+    ActiveProfileName = ProfileName;
+    emit ProfilesChanged();
+}
+
+bool FDeviceController::LoadProfile(const QString& aProfileName)
+{
+    const QString ProfileName = NormalizeProfileName(aProfileName);
+    QSettings LocalSettings;
+    LocalSettings.beginGroup(QStringLiteral("profiles"));
+    LocalSettings.beginGroup(ProfileName);
+    const QByteArray JsonData = LocalSettings.value(
+        QStringLiteral("settings")
+    ).toString().toUtf8();
+    LocalSettings.endGroup();
+    LocalSettings.endGroup();
+
+    QJsonParseError ParseError;
+    const QJsonDocument SettingsDocument = QJsonDocument::fromJson(
+        JsonData,
+        &ParseError
+    );
+    if (ParseError.error != QJsonParseError::NoError ||
+        !ApplySettingsObject(SettingsDocument.object()))
+    {
+        return false;
+    }
+
+    ActiveProfileName = ProfileName;
+    SettingsSyncStatus = QStringLiteral(
+        "Preset loaded locally; press Save settings to upload"
+    );
+    MarkSettingsDirty();
+    emit ProfilesChanged();
+    return true;
+}
+
+void FDeviceController::DeleteProfile(const QString& aProfileName)
+{
+    const QString ProfileName = NormalizeProfileName(aProfileName);
+    if (ProfileName.isEmpty())
+    {
+        return;
+    }
+
+    QSettings LocalSettings;
+    LocalSettings.beginGroup(QStringLiteral("profiles"));
+    LocalSettings.remove(ProfileName);
+    LocalSettings.endGroup();
+
+    if (ActiveProfileName == ProfileName)
+    {
+        ActiveProfileName.clear();
+    }
+    emit ProfilesChanged();
+}
+
+bool FDeviceController::LoadMatchingProfile()
+{
+    const QString MatchingProfileName = GetMatchingProfileName();
+    return !MatchingProfileName.isEmpty() &&
+        LoadProfile(MatchingProfileName);
+}
+
+void FDeviceController::LoadLocalSettings()
+{
+    QSettings LocalSettings;
+    if (!LocalSettings.contains(QStringLiteral("settings/version")))
+    {
+        return;
+    }
+
+    BoardName = LocalSettings.value(
+        QStringLiteral("settings/boardName"),
+        BoardName
+    ).toString();
+
+    bPassiveLightsEnabled = LocalSettings.value(
+        QStringLiteral("settings/passiveLights"),
+        bPassiveLightsEnabled
+    ).toBool();
+    bActiveLightsEnabled = LocalSettings.value(
+        QStringLiteral("settings/activeLights"),
+        bActiveLightsEnabled
+    ).toBool();
+    bExhaustEnabled = LocalSettings.value(
+        QStringLiteral("settings/exhaustEnabled"),
+        bExhaustEnabled
+    ).toBool();
+    bHeadlightsOpen = LocalSettings.value(
+        QStringLiteral("settings/headlightsOpen"),
+        bHeadlightsOpen
+    ).toBool();
+    bFansEnabled = LocalSettings.value(
+        QStringLiteral("settings/fansEnabled"),
+        bFansEnabled
+    ).toBool();
+    bAccelerometerEnabled = LocalSettings.value(
+        QStringLiteral("settings/accelerometerEnabled"),
+        bAccelerometerEnabled
+    ).toBool();
+    TriggerThresholdG = LocalSettings.value(
+        QStringLiteral("settings/triggerThresholdG"),
+        TriggerThresholdG
+    ).toDouble();
+    AccelerometerForwardAxis = LocalSettings.value(
+        QStringLiteral("settings/accelerometerForwardAxis"),
+        AccelerometerForwardAxis
+    ).toInt();
+    bAccelerometerForwardInverted = LocalSettings.value(
+        QStringLiteral("settings/accelerometerForwardInverted"),
+        bAccelerometerForwardInverted
+    ).toBool();
+    AccelerometerToleranceG = LocalSettings.value(
+        QStringLiteral("settings/accelerometerToleranceG"),
+        AccelerometerToleranceG
+    ).toDouble();
+    ActiveBrightnessPercent = LocalSettings.value(
+        QStringLiteral("settings/activeBrightnessPercent"),
+        ActiveBrightnessPercent
+    ).toInt();
+    DimBrightnessPercent = LocalSettings.value(
+        QStringLiteral("settings/dimBrightnessPercent"),
+        DimBrightnessPercent
+    ).toInt();
+    FanSpeedPercent = LocalSettings.value(
+        QStringLiteral("settings/fanSpeedPercent"),
+        FanSpeedPercent
+    ).toInt();
+    ServoClosedPulseUs = LocalSettings.value(
+        QStringLiteral("settings/servoClosedPulseUs"),
+        ServoClosedPulseUs
+    ).toInt();
+    ServoOpenPulseUs = LocalSettings.value(
+        QStringLiteral("settings/servoOpenPulseUs"),
+        ServoOpenPulseUs
+    ).toInt();
+
+    ExhaustLight1Channel = LocalSettings.value(
+        QStringLiteral("settings/exhaustLight1Channel"),
+        ExhaustLight1Channel
+    ).toInt();
+    ExhaustLight2Channel = LocalSettings.value(
+        QStringLiteral("settings/exhaustLight2Channel"),
+        ExhaustLight2Channel
+    ).toInt();
+    ExhaustLight3Channel = LocalSettings.value(
+        QStringLiteral("settings/exhaustLight3Channel"),
+        ExhaustLight3Channel
+    ).toInt();
+    PassiveLightsChannel = LocalSettings.value(
+        QStringLiteral("settings/passiveLightsChannel"),
+        PassiveLightsChannel
+    ).toInt();
+    TailLightsChannel = LocalSettings.value(
+        QStringLiteral("settings/tailLightsChannel"),
+        TailLightsChannel
+    ).toInt();
+    LeftTurnLightsChannel = LocalSettings.value(
+        QStringLiteral("settings/leftTurnLightsChannel"),
+        LeftTurnLightsChannel
+    ).toInt();
+    RightTurnLightsChannel = LocalSettings.value(
+        QStringLiteral("settings/rightTurnLightsChannel"),
+        RightTurnLightsChannel
+    ).toInt();
+    HeadlightServoChannel = LocalSettings.value(
+        QStringLiteral("settings/headlightServoChannel"),
+        HeadlightServoChannel
+    ).toInt();
+
+    for (int Channel = 0; Channel < ChannelRoles.size(); ++Channel)
+    {
+        ChannelRoles[Channel] = LocalSettings.value(
+            QStringLiteral("settings/channelRole%1").arg(Channel),
+            ChannelRoles[Channel]
+        ).toInt();
+    }
+
+    bLocalSettingsAvailable = true;
+    bSettingsUploadPending = true;
+}
+
+bool FDeviceController::StoreLocalSettings() const
+{
+    QSettings LocalSettings;
+    LocalSettings.setValue(QStringLiteral("settings/version"), 1);
+    LocalSettings.setValue(
+        QStringLiteral("settings/boardName"),
+        BoardName
+    );
+    LocalSettings.setValue(
+        QStringLiteral("settings/passiveLights"),
+        bPassiveLightsEnabled
+    );
+    LocalSettings.setValue(
+        QStringLiteral("settings/activeLights"),
+        bActiveLightsEnabled
+    );
+    LocalSettings.setValue(
+        QStringLiteral("settings/exhaustEnabled"),
+        bExhaustEnabled
+    );
+    LocalSettings.setValue(
+        QStringLiteral("settings/headlightsOpen"),
+        bHeadlightsOpen
+    );
+    LocalSettings.setValue(
+        QStringLiteral("settings/fansEnabled"),
+        bFansEnabled
+    );
+    LocalSettings.setValue(
+        QStringLiteral("settings/accelerometerEnabled"),
+        bAccelerometerEnabled
+    );
+    LocalSettings.setValue(
+        QStringLiteral("settings/triggerThresholdG"),
+        TriggerThresholdG
+    );
+    LocalSettings.setValue(
+        QStringLiteral("settings/accelerometerForwardAxis"),
+        AccelerometerForwardAxis
+    );
+    LocalSettings.setValue(
+        QStringLiteral("settings/accelerometerForwardInverted"),
+        bAccelerometerForwardInverted
+    );
+    LocalSettings.setValue(
+        QStringLiteral("settings/accelerometerToleranceG"),
+        AccelerometerToleranceG
+    );
+    LocalSettings.setValue(
+        QStringLiteral("settings/activeBrightnessPercent"),
+        ActiveBrightnessPercent
+    );
+    LocalSettings.setValue(
+        QStringLiteral("settings/dimBrightnessPercent"),
+        DimBrightnessPercent
+    );
+    LocalSettings.setValue(
+        QStringLiteral("settings/fanSpeedPercent"),
+        FanSpeedPercent
+    );
+    LocalSettings.setValue(
+        QStringLiteral("settings/servoClosedPulseUs"),
+        ServoClosedPulseUs
+    );
+    LocalSettings.setValue(
+        QStringLiteral("settings/servoOpenPulseUs"),
+        ServoOpenPulseUs
+    );
+    LocalSettings.setValue(
+        QStringLiteral("settings/exhaustLight1Channel"),
+        ExhaustLight1Channel
+    );
+    LocalSettings.setValue(
+        QStringLiteral("settings/exhaustLight2Channel"),
+        ExhaustLight2Channel
+    );
+    LocalSettings.setValue(
+        QStringLiteral("settings/exhaustLight3Channel"),
+        ExhaustLight3Channel
+    );
+    LocalSettings.setValue(
+        QStringLiteral("settings/passiveLightsChannel"),
+        PassiveLightsChannel
+    );
+    LocalSettings.setValue(
+        QStringLiteral("settings/tailLightsChannel"),
+        TailLightsChannel
+    );
+    LocalSettings.setValue(
+        QStringLiteral("settings/leftTurnLightsChannel"),
+        LeftTurnLightsChannel
+    );
+    LocalSettings.setValue(
+        QStringLiteral("settings/rightTurnLightsChannel"),
+        RightTurnLightsChannel
+    );
+    LocalSettings.setValue(
+        QStringLiteral("settings/headlightServoChannel"),
+        HeadlightServoChannel
+    );
+
+    for (int Channel = 0; Channel < ChannelRoles.size(); ++Channel)
+    {
+        LocalSettings.setValue(
+            QStringLiteral("settings/channelRole%1").arg(Channel),
+            ChannelRoles[Channel]
+        );
+    }
+
+    LocalSettings.sync();
+    return LocalSettings.status() == QSettings::NoError;
+}
+
+void FDeviceController::SendSettingsToController()
+{
+    SendCommand(
+        QByteArray("SET,BOARD_NAME,") +
+        BoardName.toUtf8()
+    );
+
+    SendCommand(
+        QByteArray("SET,PASSIVE_LIGHTS,") +
+        (bPassiveLightsEnabled ? "1" : "0")
+    );
+
+    SendCommand(
+        QByteArray("SET,ACTIVE_LIGHTS,") +
+        (bActiveLightsEnabled ? "1" : "0")
+    );
+
+    SendCommand(
+        QByteArray("SET,EXHAUST_ENABLED,") +
+        (bExhaustEnabled ? "1" : "0")
+    );
+
+    SendCommand(
+        QByteArray("SET,HEADLIGHT_OPEN,") +
+        (bHeadlightsOpen ? "1" : "0")
+    );
+
+    SendCommand(
+        QByteArray("SET,FANS_ENABLED,") +
+        (bFansEnabled ? "1" : "0")
+    );
 
     SendCommand(
         QByteArray("SET,ACCELEROMETER_ENABLED,") +
@@ -643,6 +1448,21 @@ void FDeviceController::SaveSettings()
     SendCommand(
         QByteArray("SET,EXHAUST_TRIGGER_G,") +
         QByteArray::number(TriggerThresholdG, 'f', 3)
+    );
+
+    SendCommand(
+        QByteArray("SET,ACCELEROMETER_FORWARD_AXIS,") +
+        QByteArray::number(AccelerometerForwardAxis)
+    );
+
+    SendCommand(
+        QByteArray("SET,ACCELEROMETER_FORWARD_INVERTED,") +
+        (bAccelerometerForwardInverted ? "1" : "0")
+    );
+
+    SendCommand(
+        QByteArray("SET,ACCELEROMETER_TOLERANCE_G,") +
+        QByteArray::number(AccelerometerToleranceG, 'f', 3)
     );
 
     SendCommand(
@@ -673,6 +1493,7 @@ void FDeviceController::SaveSettings()
     const QList<QPair<const char*, int>> ChannelAssignments = {
         {"EXHAUST_LIGHT_1_CHANNEL", ExhaustLight1Channel},
         {"EXHAUST_LIGHT_2_CHANNEL", ExhaustLight2Channel},
+        {"EXHAUST_LIGHT_3_CHANNEL", ExhaustLight3Channel},
         {"PASSIVE_LIGHTS_CHANNEL", PassiveLightsChannel},
         {"TAIL_LIGHTS_CHANNEL", TailLightsChannel},
         {"LEFT_TURN_LIGHTS_CHANNEL", LeftTurnLightsChannel},
@@ -702,22 +1523,53 @@ void FDeviceController::SaveSettings()
     SendCommand(
         QByteArrayLiteral("SAVE")
     );
+}
 
+void FDeviceController::SaveSettings()
+{
+    const bool bStoredLocally = StoreLocalSettings();
+    if (!bStoredLocally)
+    {
+        emit SettingsSaveCompleted(false, false);
+        return;
+    }
+
+    bLocalSettingsAvailable = true;
     bSettingsDirty = false;
+
+    if (
+        !bConnected ||
+        BluetoothSocketPtr->state() !=
+        QBluetoothSocket::SocketState::ConnectedState
+    )
+    {
+        bSettingsUploadPending = true;
+        emit ConfigurationChanged();
+        emit SettingsSaveCompleted(false, true);
+        return;
+    }
+
+    SendSettingsToController();
+    bSettingsUploadPending = false;
     emit ConfigurationChanged();
+    emit SettingsSaveCompleted(true, true);
 }
 
 void FDeviceController::ResetDefaults()
 {
     bAccelerometerEnabled = true;
     TriggerThresholdG = 0.06;
+    AccelerometerForwardAxis = 0;
+    bAccelerometerForwardInverted = false;
+    AccelerometerToleranceG = 0.02;
     ActiveBrightnessPercent = 100;
     DimBrightnessPercent = 25;
     FanSpeedPercent = 70;
 
     ExhaustLight1Channel = 0;
     ExhaustLight2Channel = 1;
-    PassiveLightsChannel = 2;
+    ExhaustLight3Channel = 2;
+    PassiveLightsChannel = 3;
     TailLightsChannel = 13;
     LeftTurnLightsChannel = 14;
     RightTurnLightsChannel = 15;
@@ -727,11 +1579,21 @@ void FDeviceController::ResetDefaults()
     ServoOpenPulseUs = 512;
     bServoZeroed = false;
     ChannelRoles = {
-        1, 2, 3, 0, 0, 0, 0, 0,
+        1, 2, 10, 3, 0, 0, 0, 0,
         0, 0, 0, 0, 7, 4, 5, 6
     };
 
     MarkSettingsDirty();
+}
+
+void FDeviceController::TestExhaustColor(const QString& aColor)
+{
+    if (aColor != QStringLiteral("R") && aColor != QStringLiteral("G") &&
+        aColor != QStringLiteral("B") && aColor != QStringLiteral("OFF"))
+    {
+        return;
+    }
+    SendCommand(QByteArray("TEST,EXHAUST,") + aColor.toUtf8());
 }
 
 void FDeviceController::TestExhaust()
@@ -739,6 +1601,19 @@ void FDeviceController::TestExhaust()
     SendCommand(
         QByteArrayLiteral("TEST,EXHAUST")
     );
+}
+
+void FDeviceController::RunDiagnostics()
+{
+    if (!bConnected)
+    {
+        return;
+    }
+
+    bDiagnosticsPending = true;
+    DiagnosticsSummary = QStringLiteral("Checking ESP32 hardware...");
+    emit DiagnosticsChanged();
+    SendCommand(QByteArrayLiteral("GET,DIAGNOSTICS"));
 }
 
 void FDeviceController::HandleDeviceDiscovered(
@@ -797,9 +1672,21 @@ void FDeviceController::HandleSocketConnected()
         QByteArrayLiteral("HELLO,1")
     );
 
-    SendCommand(
-        QByteArrayLiteral("GET,CONFIG")
-    );
+    if (bSettingsUploadPending && !bSettingsDirty)
+    {
+        SendSettingsToController();
+        bSettingsUploadPending = false;
+        emit ConfigurationChanged();
+        emit SettingsSaveCompleted(true, true);
+    }
+    else if (!bLocalSettingsAvailable && !bSettingsDirty)
+    {
+        SendCommand(
+            QByteArrayLiteral("GET,CONFIG")
+        );
+    }
+
+    RunDiagnostics();
 }
 
 void FDeviceController::HandleSocketDisconnected()
@@ -953,9 +1840,21 @@ void FDeviceController::ParseLine(
     {
         ParseConfiguration(Fields);
     }
+    else if (Fields[0] == "ACK")
+    {
+        ParseAcknowledgement(Fields);
+    }
+    else if (Fields[0] == "ERR")
+    {
+        ParseError(Fields);
+    }
     else if (Fields[0] == "TEL")
     {
         ParseTelemetry(Fields);
+    }
+    else if (Fields[0] == "DIAG")
+    {
+        ParseDiagnostics(Fields);
     }
 }
 
@@ -974,7 +1873,18 @@ void FDeviceController::ParseHello(
     FirmwareVersion =
         QString::fromUtf8(aFieldsRef[3]);
 
+    if (aFieldsRef.size() >= 5)
+    {
+        BoardName = QString::fromUtf8(aFieldsRef[4]);
+    }
+
+    if (aFieldsRef.size() >= 6)
+    {
+        BoardId = QString::fromUtf8(aFieldsRef[5]);
+    }
+
     emit DeviceInformationChanged();
+    emit ProfilesChanged();
 }
 
 void FDeviceController::ParseConfiguration(
@@ -1039,7 +1949,7 @@ void FDeviceController::ParseConfiguration(
             ChannelRoles[Channel] = qBound(
                 0,
                 aFieldsRef[18 + Channel].toInt(),
-                8
+                10
             );
         }
     }
@@ -1051,8 +1961,79 @@ void FDeviceController::ParseConfiguration(
         bServoZeroed = false;
     }
 
+    if (aFieldsRef.size() >= 39)
+    {
+        AccelerometerForwardAxis = qBound(
+            0,
+            aFieldsRef[36].toInt(),
+            2
+        );
+        bAccelerometerForwardInverted =
+            aFieldsRef[37].toInt() != 0;
+        AccelerometerToleranceG = qBound(
+            0.0,
+            aFieldsRef[38].toDouble(),
+            0.20
+        );
+    }
+
+    if (aFieldsRef.size() >= 40)
+    {
+        const int Channel = aFieldsRef[39].toInt();
+        ExhaustLight3Channel = Channel == 255
+            ? -1
+            : qBound(0, Channel, 15);
+    }
+
     bSettingsDirty = false;
     emit ConfigurationChanged();
+}
+
+void FDeviceController::ParseAcknowledgement(
+    const QList<QByteArray>& aFieldsRef
+)
+{
+    if (
+        aFieldsRef.size() < 3 ||
+        aFieldsRef[1] != "SAVE" ||
+        aFieldsRef[2] != "1" ||
+        !bSettingsUploadInProgress
+    )
+    {
+        return;
+    }
+
+    SettingsUploadTimeoutTimerPtr->stop();
+    bSettingsUploadInProgress = false;
+    bSettingsUploadPending = false;
+    SettingsSyncStatus = QStringLiteral("Settings uploaded to ESP32");
+    emit ConfigurationChanged();
+    emit SettingsSaveCompleted(true, true);
+}
+
+void FDeviceController::ParseError(
+    const QList<QByteArray>& aFieldsRef
+)
+{
+    if (!bSettingsUploadInProgress)
+    {
+        return;
+    }
+
+    SettingsUploadTimeoutTimerPtr->stop();
+    bSettingsUploadInProgress = false;
+    bSettingsUploadPending = true;
+
+    const QString ErrorCode =
+        aFieldsRef.size() > 1
+            ? QString::fromUtf8(aFieldsRef[1])
+            : QStringLiteral("unknown error");
+
+    SettingsSyncStatus =
+        QStringLiteral("Upload failed (%1); settings remain saved locally")
+            .arg(ErrorCode);
+    emit ConfigurationChanged();
+    emit SettingsSaveCompleted(false, true);
 }
 
 void FDeviceController::ParseTelemetry(
@@ -1064,16 +2045,22 @@ void FDeviceController::ParseTelemetry(
         return;
     }
 
+    bSteeringSignalPresent =
+        aFieldsRef[2].toInt() != 0;
+
     SteeringPulseUs =
-        aFieldsRef[2].toInt() != 0
+        bSteeringSignalPresent
             ? aFieldsRef[3].toInt()
             : 0;
 
     SteeringPercent =
         aFieldsRef[4].toInt();
 
+    bThrottleSignalPresent =
+        aFieldsRef[5].toInt() != 0;
+
     ThrottlePulseUs =
-        aFieldsRef[5].toInt() != 0
+        bThrottleSignalPresent
             ? aFieldsRef[6].toInt()
             : 0;
 
@@ -1110,6 +2097,40 @@ void FDeviceController::ParseTelemetry(
     bExhaustPulseActive =
         aFieldsRef[17].toInt() != 0;
 
+    bReverseActive =
+        aFieldsRef.size() > 18 &&
+        aFieldsRef[18].toInt() != 0;
+
+    emit TelemetryChanged();
+    emit DiagnosticsChanged();
+}
+
+void FDeviceController::ParseDiagnostics(
+    const QList<QByteArray>& aFieldsRef
+)
+{
+    if (aFieldsRef.size() < 10)
+    {
+        return;
+    }
+
+    bPcaConnected = aFieldsRef[1].toInt() != 0;
+    PcaAddress = aFieldsRef[2].toInt();
+    PcaMode1 = aFieldsRef[3].toInt();
+    bAccelerometerConnected = aFieldsRef[4].toInt() != 0;
+    bAccelerometerCalibrated = aFieldsRef[5].toInt() != 0;
+    AccelerometerAddress = aFieldsRef[6].toInt();
+    AccelerometerWhoAmI = aFieldsRef[7].toInt();
+    bSteeringSignalPresent = aFieldsRef[8].toInt() != 0;
+    bThrottleSignalPresent = aFieldsRef[9].toInt() != 0;
+    bDiagnosticsPending = false;
+
+    DiagnosticsSummary = QStringLiteral("Diagnostics complete: %1")
+        .arg(bPcaConnected && bAccelerometerConnected
+            ? QStringLiteral("ESP32 sees both I2C boards")
+            : QStringLiteral("one or more boards are not responding"));
+
+    emit DiagnosticsChanged();
     emit TelemetryChanged();
 }
 
@@ -1123,7 +2144,17 @@ void FDeviceController::SetConnectionState(
     bScanning = aScanning;
     ConnectionStatus = aStatusRef;
 
+    if (!aConnected)
+    {
+        bDiagnosticsPending = false;
+        bPcaConnected = false;
+        bAccelerometerConnected = false;
+        bAccelerometerCalibrated = false;
+        DiagnosticsSummary = QStringLiteral("Controller disconnected");
+    }
+
     emit ConnectionChanged();
+    emit DiagnosticsChanged();
 }
 
 void FDeviceController::MarkSettingsDirty()

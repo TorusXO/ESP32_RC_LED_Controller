@@ -19,10 +19,18 @@ public:
     void Update();
 
     bool ConsumeConfigurationChanged();
-    bool ConsumeExhaustTestRequested();
+    bool ConsumeExhaustTestRequested(uint8_t& aRole);
+    bool ConsumeServoTestRequested(
+        uint8_t& aChannel,
+        uint16_t& aPulse
+    );
+    bool ConsumeServoTestClearRequested();
+    bool ConsumeDiagnosticsRequested();
 
     void SendHello();
     void SendConfiguration();
+    const char* GetBoardName() const;
+    void GetBoardId(char* aBuffer, size_t aBufferSize) const;
 
     void SendTelemetry(
         uint32_t aCurrentTimeMs,
@@ -41,7 +49,20 @@ public:
         float aGyroscopeZDps,
         const char* aTurnDirectionPtr,
         bool aBrakeActive,
-        bool aExhaustPulseActive
+        bool aExhaustPulseActive,
+        bool aReverseActive
+    );
+
+    void SendDiagnostics(
+        bool aPcaConnected,
+        uint8_t aPcaAddress,
+        uint8_t aPcaMode1,
+        bool aAccelerometerConnected,
+        bool aAccelerometerCalibrated,
+        uint8_t aAccelerometerAddress,
+        uint8_t aAccelerometerWhoAmI,
+        bool aSteeringHasSignal,
+        bool aThrottleHasSignal
     );
 
 
@@ -77,4 +98,10 @@ private:
     bool bHadBluetoothClient = false;
     bool bConfigurationChanged = false;
     bool bExhaustTestRequested = false;
+    uint8_t ExhaustTestRole = 0;
+    bool bServoTestRequested = false;
+    bool bServoTestClearRequested = false;
+    uint8_t ServoTestChannel = 0;
+    uint16_t ServoTestPulse = 0;
+    bool bDiagnosticsRequested = false;
 };

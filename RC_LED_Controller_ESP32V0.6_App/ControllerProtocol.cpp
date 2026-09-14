@@ -1,6 +1,7 @@
 #include "ControllerProtocol.h"
 
 #include <BluetoothSerial.h>
+#include <Esp.h>
 #include <Preferences.h>
 
 #include <stdlib.h>
@@ -25,6 +26,8 @@ namespace
 
     static constexpr float MAXIMUM_TRIGGER_THRESHOLD_G =
         0.50f;
+
+    static constexpr size_t BOARD_NAME_SIZE = 32;
 
 
     uint8_t ParseChannel(const char* aValuePtr)
@@ -55,6 +58,11 @@ bool FControllerProtocol::Begin(
     bHadBluetoothClient = false;
     bConfigurationChanged = false;
     bExhaustTestRequested = false;
+    bServoTestRequested = false;
+    bServoTestClearRequested = false;
+    ServoTestChannel = 0;
+    ServoTestPulse = 0;
+    bDiagnosticsRequested = false;
 
     LoadConfiguration();
 
@@ -146,12 +154,45 @@ bool FControllerProtocol::ConsumeConfigurationChanged()
     return bWasChanged;
 }
 
-bool FControllerProtocol::ConsumeExhaustTestRequested()
+bool FControllerProtocol::ConsumeExhaustTestRequested(uint8_t& aRole)
 {
     const bool bWasRequested =
         bExhaustTestRequested;
 
     bExhaustTestRequested = false;
+    aRole = ExhaustTestRole;
+    return bWasRequested;
+}
+
+bool FControllerProtocol::ConsumeServoTestRequested(
+    uint8_t& aChannel,
+    uint16_t& aPulse
+)
+{
+    if (!bServoTestRequested)
+    {
+        return false;
+    }
+
+    aChannel = ServoTestChannel;
+    aPulse = ServoTestPulse;
+    bServoTestRequested = false;
+    return true;
+}
+
+bool FControllerProtocol::ConsumeServoTestClearRequested()
+{
+    const bool bWasRequested =
+        bServoTestClearRequested;
+
+    bServoTestClearRequested = false;
+    return bWasRequested;
+}
+
+bool FControllerProtocol::ConsumeDiagnosticsRequested()
+{
+    const bool bWasRequested = bDiagnosticsRequested;
+    bDiagnosticsRequested = false;
     return bWasRequested;
 }
 
@@ -165,11 +206,45 @@ void FControllerProtocol::SendHello()
         return;
     }
 
+    char BoardId[17] = {};
+    GetBoardId(BoardId, sizeof(BoardId));
+
     BluetoothSerialPortPtr->printf(
-        "HELLO,%s,%s,%s\n",
+        "HELLO,%s,%s,%s,%s,%s\n",
         DEVICE_PROTOCOL_VERSION,
         DEVICE_NAME,
-        FIRMWARE_VERSION
+        FIRMWARE_VERSION,
+        GetBoardName(),
+        BoardId
+    );
+}
+
+const char* FControllerProtocol::GetBoardName() const
+{
+    return ConfigurationPtr == nullptr ||
+        ConfigurationPtr->BoardName[0] == '\0'
+        ? "Unassigned body"
+        : ConfigurationPtr->BoardName;
+}
+
+void FControllerProtocol::GetBoardId(
+    char* aBuffer,
+    size_t aBufferSize
+) const
+{
+    if (aBuffer == nullptr || aBufferSize == 0)
+    {
+        return;
+    }
+
+    const uint64_t ChipId = ESP.getEfuseMac();
+
+    snprintf(
+        aBuffer,
+        aBufferSize,
+        "%04X%08X",
+        static_cast<unsigned int>(ChipId >> 32),
+        static_cast<unsigned int>(ChipId & 0xFFFFFFFFULL)
     );
 }
 
@@ -186,7 +261,8 @@ void FControllerProtocol::SendConfiguration()
 
     BluetoothSerialPortPtr->printf(
         "CFG,%u,%u,%u,%u,%u,%u,%.3f,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,"
-        "%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u\n",
+        "%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,"
+        "%u,%u,%.3f,%u\n",
         ConfigurationPtr->bPassiveLightsEnabled
             ? 1U
             : 0U,
@@ -233,7 +309,13 @@ void FControllerProtocol::SendConfiguration()
         ConfigurationPtr->ChannelRoles[14],
         ConfigurationPtr->ChannelRoles[15],
         ConfigurationPtr->ServoClosedPulseUs,
-        ConfigurationPtr->ServoOpenPulseUs
+        ConfigurationPtr->ServoOpenPulseUs,
+        ConfigurationPtr->AccelerometerForwardAxis,
+        ConfigurationPtr->bAccelerometerForwardInverted
+            ? 1U
+            : 0U,
+        ConfigurationPtr->AccelerometerToleranceG,
+        ConfigurationPtr->ExhaustLight3Channel
     );
 }
 
@@ -254,7 +336,8 @@ void FControllerProtocol::SendTelemetry(
     float aGyroscopeZDps,
     const char* aTurnDirectionPtr,
     bool aBrakeActive,
-    bool aExhaustPulseActive
+    bool aExhaustPulseActive,
+    bool aReverseActive
 )
 {
     if (
@@ -268,7 +351,7 @@ void FControllerProtocol::SendTelemetry(
     BluetoothSerialPortPtr->printf(
         "TEL,%lu,%u,%lu,%d,%u,%lu,%d,"
         "%.3f,%.3f,%.3f,%.3f,"
-        "%.1f,%.1f,%.1f,%s,%u,%u\n",
+        "%.1f,%.1f,%.1f,%s,%u,%u,%u\n",
         static_cast<unsigned long>(
             aCurrentTimeMs
         ),
@@ -291,7 +374,42 @@ void FControllerProtocol::SendTelemetry(
         aGyroscopeZDps,
         aTurnDirectionPtr,
         aBrakeActive ? 1U : 0U,
-        aExhaustPulseActive ? 1U : 0U
+        aExhaustPulseActive ? 1U : 0U,
+        aReverseActive ? 1U : 0U
+    );
+}
+
+void FControllerProtocol::SendDiagnostics(
+    bool aPcaConnected,
+    uint8_t aPcaAddress,
+    uint8_t aPcaMode1,
+    bool aAccelerometerConnected,
+    bool aAccelerometerCalibrated,
+    uint8_t aAccelerometerAddress,
+    uint8_t aAccelerometerWhoAmI,
+    bool aSteeringHasSignal,
+    bool aThrottleHasSignal
+)
+{
+    if (
+        BluetoothSerialPortPtr == nullptr ||
+        !BluetoothSerialPortPtr->hasClient()
+    )
+    {
+        return;
+    }
+
+    BluetoothSerialPortPtr->printf(
+        "DIAG,%u,%u,%u,%u,%u,%u,%u,%u,%u\n",
+        aPcaConnected ? 1U : 0U,
+        aPcaAddress,
+        aPcaMode1,
+        aAccelerometerConnected ? 1U : 0U,
+        aAccelerometerCalibrated ? 1U : 0U,
+        aAccelerometerAddress,
+        aAccelerometerWhoAmI,
+        aSteeringHasSignal ? 1U : 0U,
+        aThrottleHasSignal ? 1U : 0U
     );
 }
 
@@ -334,6 +452,15 @@ void FControllerProtocol::HandleCommand(
         )
         {
             SendConfiguration();
+            return;
+        }
+
+        if (
+            KeyPtr != nullptr &&
+            strcmp(KeyPtr, "DIAGNOSTICS") == 0
+        )
+        {
+            bDiagnosticsRequested = true;
             return;
         }
 
@@ -388,9 +515,96 @@ void FControllerProtocol::HandleCommand(
             strcmp(KeyPtr, "EXHAUST") == 0
         )
         {
+            const char* ColorPtr = strtok_r(nullptr, ",", &SaveStatePtr);
+            uint8_t Role = 0;
+            if (ColorPtr != nullptr)
+            {
+                if (strcmp(ColorPtr, "R") == 0) Role = 1;
+                else if (strcmp(ColorPtr, "G") == 0) Role = 2;
+                else if (strcmp(ColorPtr, "B") == 0) Role = 10;
+                else if (strcmp(ColorPtr, "OFF") == 0) Role = 255;
+                else { SendError("INVALID_EXHAUST_COLOR"); return; }
+            }
+            if (strtok_r(nullptr, ",", &SaveStatePtr) != nullptr)
+            {
+                SendError("INVALID_EXHAUST_COLOR");
+                return;
+            }
+            ExhaustTestRole = Role;
             bExhaustTestRequested = true;
             SendAcknowledgement(
                 "TEST_EXHAUST",
+                "1"
+            );
+
+            return;
+        }
+
+        if (
+            KeyPtr != nullptr &&
+            strcmp(KeyPtr, "SERVO") == 0
+        )
+        {
+            const char* ChannelPtr =
+                strtok_r(
+                    nullptr,
+                    ",",
+                    &SaveStatePtr
+                );
+
+            const char* PulsePtr =
+                strtok_r(
+                    nullptr,
+                    ",",
+                    &SaveStatePtr
+                );
+
+            if (ChannelPtr == nullptr || PulsePtr == nullptr)
+            {
+                SendError("INVALID_SERVO_TEST");
+                return;
+            }
+
+            const int Channel = atoi(ChannelPtr);
+            const int Pulse = atoi(PulsePtr);
+
+            if (Channel < 0 || Channel > 15)
+            {
+                SendError("INVALID_SERVO_CHANNEL");
+                return;
+            }
+
+            if (Pulse < 0 || Pulse > 4095)
+            {
+                SendError("INVALID_SERVO_PULSE");
+                return;
+            }
+
+            ServoTestChannel =
+                static_cast<uint8_t>(Channel);
+            ServoTestPulse =
+                static_cast<uint16_t>(Pulse);
+            bServoTestClearRequested = false;
+            bServoTestRequested = true;
+
+            SendAcknowledgement(
+                "TEST_SERVO",
+                "1"
+            );
+
+            return;
+        }
+
+        if (
+            KeyPtr != nullptr &&
+            strcmp(KeyPtr, "SERVO_CLEAR") == 0
+        )
+        {
+            bServoTestRequested = false;
+            bServoTestClearRequested = true;
+
+            SendAcknowledgement(
+                "TEST_SERVO_CLEAR",
                 "1"
             );
 
@@ -496,6 +710,56 @@ void FControllerProtocol::HandleSetCommand(
                 MAXIMUM_TRIGGER_THRESHOLD_G
             );
     }
+    else if (strcmp(aKeyPtr, "ACCELEROMETER_FORWARD_AXIS") == 0)
+    {
+        ConfigurationPtr->AccelerometerForwardAxis = static_cast<uint8_t>(
+            constrain(atoi(aValuePtr), 0, 2)
+        );
+    }
+    else if (strcmp(aKeyPtr, "ACCELEROMETER_FORWARD_INVERTED") == 0)
+    {
+        ConfigurationPtr->bAccelerometerForwardInverted = bBooleanValue;
+    }
+    else if (strcmp(aKeyPtr, "ACCELEROMETER_TOLERANCE_G") == 0)
+    {
+        ConfigurationPtr->AccelerometerToleranceG = constrain(
+            static_cast<float>(atof(aValuePtr)),
+            0.0f,
+            0.20f
+        );
+    }
+    else if (strcmp(aKeyPtr, "BOARD_NAME") == 0)
+    {
+        char SanitizedBoardName[BOARD_NAME_SIZE] = {};
+        size_t DestinationIndex = 0;
+
+        for (
+            size_t SourceIndex = 0;
+            aValuePtr[SourceIndex] != '\0' &&
+            DestinationIndex + 1 < sizeof(SanitizedBoardName);
+            ++SourceIndex
+        )
+        {
+            const char Character = aValuePtr[SourceIndex];
+
+            if (Character == ',')
+            {
+                break;
+            }
+
+            SanitizedBoardName[DestinationIndex++] = Character;
+        }
+
+        SanitizedBoardName[DestinationIndex] = '\0';
+        strncpy(
+            ConfigurationPtr->BoardName,
+            SanitizedBoardName,
+            sizeof(ConfigurationPtr->BoardName) - 1
+        );
+        ConfigurationPtr->BoardName[
+            sizeof(ConfigurationPtr->BoardName) - 1
+        ] = '\0';
+    }
     else if (
         strcmp(
             aKeyPtr,
@@ -565,6 +829,10 @@ void FControllerProtocol::HandleSetCommand(
     {
         ConfigurationPtr->ExhaustLight2Channel = ParseChannel(aValuePtr);
     }
+    else if (strcmp(aKeyPtr, "EXHAUST_LIGHT_3_CHANNEL") == 0)
+    {
+        ConfigurationPtr->ExhaustLight3Channel = ParseChannel(aValuePtr);
+    }
     else if (strcmp(aKeyPtr, "PASSIVE_LIGHTS_CHANNEL") == 0)
     {
         ConfigurationPtr->PassiveLightsChannel = ParseChannel(aValuePtr);
@@ -595,7 +863,7 @@ void FControllerProtocol::HandleSetCommand(
         }
 
         ConfigurationPtr->ChannelRoles[Channel] = static_cast<uint8_t>(
-            constrain(atoi(aValuePtr), 0, 8)
+            constrain(atoi(aValuePtr), 0, 10)
         );
     }
     else
@@ -663,10 +931,41 @@ void FControllerProtocol::LoadConfiguration()
                 bAccelerometerExhaustEnabled
         );
 
+    const String StoredBoardName = ControllerPreferences.getString(
+        "boardname",
+        ConfigurationPtr->BoardName
+    );
+    strncpy(
+        ConfigurationPtr->BoardName,
+        StoredBoardName.c_str(),
+        sizeof(ConfigurationPtr->BoardName) - 1
+    );
+    ConfigurationPtr->BoardName[
+        sizeof(ConfigurationPtr->BoardName) - 1
+    ] = '\0';
+
     ConfigurationPtr->ExhaustTriggerThresholdG =
         ControllerPreferences.getFloat(
             "trig",
             ConfigurationPtr->ExhaustTriggerThresholdG
+        );
+
+    ConfigurationPtr->AccelerometerForwardAxis =
+        ControllerPreferences.getUChar(
+            "fwdaxis",
+            ConfigurationPtr->AccelerometerForwardAxis
+        );
+
+    ConfigurationPtr->bAccelerometerForwardInverted =
+        ControllerPreferences.getBool(
+            "fwdinv",
+            ConfigurationPtr->bAccelerometerForwardInverted
+        );
+
+    ConfigurationPtr->AccelerometerToleranceG =
+        ControllerPreferences.getFloat(
+            "acctol",
+            ConfigurationPtr->AccelerometerToleranceG
         );
 
     ConfigurationPtr->ActiveBrightnessPercent =
@@ -689,6 +988,7 @@ void FControllerProtocol::LoadConfiguration()
 
     ConfigurationPtr->ExhaustLight1Channel = ControllerPreferences.getUChar("exhaust1", ConfigurationPtr->ExhaustLight1Channel);
     ConfigurationPtr->ExhaustLight2Channel = ControllerPreferences.getUChar("exhaust2", ConfigurationPtr->ExhaustLight2Channel);
+    ConfigurationPtr->ExhaustLight3Channel = ControllerPreferences.getUChar("exhaust3", ConfigurationPtr->ExhaustLight3Channel);
     ConfigurationPtr->PassiveLightsChannel = ControllerPreferences.getUChar("passivech", ConfigurationPtr->PassiveLightsChannel);
     ConfigurationPtr->TailLightsChannel = ControllerPreferences.getUChar("tailch", ConfigurationPtr->TailLightsChannel);
     ConfigurationPtr->LeftTurnLightsChannel = ControllerPreferences.getUChar("leftch", ConfigurationPtr->LeftTurnLightsChannel);
@@ -722,6 +1022,17 @@ void FControllerProtocol::LoadConfiguration()
             MINIMUM_TRIGGER_THRESHOLD_G,
             MAXIMUM_TRIGGER_THRESHOLD_G
         );
+
+    ConfigurationPtr->AccelerometerForwardAxis = constrain(
+        ConfigurationPtr->AccelerometerForwardAxis,
+        static_cast<uint8_t>(0),
+        static_cast<uint8_t>(2)
+    );
+    ConfigurationPtr->AccelerometerToleranceG = constrain(
+        ConfigurationPtr->AccelerometerToleranceG,
+        0.0f,
+        0.20f
+    );
 
     ConfigurationPtr->ActiveBrightnessPercent =
         constrain(
@@ -791,9 +1102,27 @@ bool FControllerProtocol::SaveConfiguration()
             bAccelerometerExhaustEnabled
     );
 
+    ControllerPreferences.putString(
+        "boardname",
+        ConfigurationPtr->BoardName
+    );
+
     ControllerPreferences.putFloat(
         "trig",
         ConfigurationPtr->ExhaustTriggerThresholdG
+    );
+
+    ControllerPreferences.putUChar(
+        "fwdaxis",
+        ConfigurationPtr->AccelerometerForwardAxis
+    );
+    ControllerPreferences.putBool(
+        "fwdinv",
+        ConfigurationPtr->bAccelerometerForwardInverted
+    );
+    ControllerPreferences.putFloat(
+        "acctol",
+        ConfigurationPtr->AccelerometerToleranceG
     );
 
     ControllerPreferences.putUChar(
@@ -813,6 +1142,7 @@ bool FControllerProtocol::SaveConfiguration()
 
     ControllerPreferences.putUChar("exhaust1", ConfigurationPtr->ExhaustLight1Channel);
     ControllerPreferences.putUChar("exhaust2", ConfigurationPtr->ExhaustLight2Channel);
+    ControllerPreferences.putUChar("exhaust3", ConfigurationPtr->ExhaustLight3Channel);
     ControllerPreferences.putUChar("passivech", ConfigurationPtr->PassiveLightsChannel);
     ControllerPreferences.putUChar("tailch", ConfigurationPtr->TailLightsChannel);
     ControllerPreferences.putUChar("leftch", ConfigurationPtr->LeftTurnLightsChannel);

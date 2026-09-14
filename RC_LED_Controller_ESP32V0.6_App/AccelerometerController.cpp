@@ -50,6 +50,7 @@ bool FAccelerometerController::Begin(
 {
     WirePtr = &aWireRef;
     DeviceAddress = aDeviceAddress;
+    DeviceWhoAmI = 0;
 
     bConnected = false;
     bCalibrated = false;
@@ -79,6 +80,8 @@ bool FAccelerometerController::Begin(
         "MPU WHO_AM_I = 0x%02X\n",
         DeviceId
     );
+
+    DeviceWhoAmI = DeviceId;
 
     const bool bIsMPU6050 =
         (DeviceId & 0x7E) ==
@@ -119,6 +122,18 @@ bool FAccelerometerController::SetAxisConfiguration(
     ResetFilter();
 
     return true;
+}
+
+void FAccelerometerController::SetForwardToleranceG(
+    float aToleranceG
+)
+{
+    ForwardToleranceG = constrain(
+        aToleranceG,
+        0.0f,
+        0.20f
+    );
+    ResetFilter();
 }
 
 bool FAccelerometerController::CalibrateStationary(
@@ -366,10 +381,15 @@ bool FAccelerometerController::Update(uint32_t aCurrentTimeMs)
             ZG
         );
 
+    const float ToleratedForwardAccelerationG =
+        fabsf(ForwardAccelerationG) < ForwardToleranceG
+            ? 0.0f
+            : ForwardAccelerationG;
+
     if (!bFilterInitialized)
     {
         AccelerationState.FilteredForwardAccelerationG =
-            ForwardAccelerationG;
+            ToleratedForwardAccelerationG;
 
         bFilterInitialized = true;
     }
@@ -381,7 +401,7 @@ bool FAccelerometerController::Update(uint32_t aCurrentTimeMs)
                 (1.0f - FORWARD_ACCELERATION_FILTER_ALPHA)
             ) +
             (
-                ForwardAccelerationG *
+                ToleratedForwardAccelerationG *
                 FORWARD_ACCELERATION_FILTER_ALPHA
             );
     }
@@ -449,6 +469,11 @@ bool FAccelerometerController::IsCalibrated() const
 uint8_t FAccelerometerController::GetDeviceAddress() const
 {
     return DeviceAddress;
+}
+
+uint8_t FAccelerometerController::GetWhoAmI() const
+{
+    return DeviceWhoAmI;
 }
 
 void FAccelerometerController::ResetFilter()
